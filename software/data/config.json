@@ -1,0 +1,163 @@
+{
+  "app_name": "Xsolla Game Recap Overlay",
+  "version": "1.0.0-hackathon",
+  "hotkey": "Ctrl+Shift+X",
+  "hotkey_alt": "Alt+X",
+  "toast_duration_ms": 4000,
+  "enable_toast_sound": true,
+  "scan_interval_sec": 1.5,
+  "saas_api_url": "http://localhost:3000/api/recap",
+  "saas_api_token": "xsolla-baku-demo-token",
+  "auto_capture_screenshots": true,
+  "supported_games": [
+    {
+      "id": "stardew_valley",
+      "name": "Stardew Valley",
+      "genre": "Farming / RPG",
+      "executables": [
+        "stardew valley.exe",
+        "stardewvalley.exe",
+        "stardewmoddingapi.exe",
+        "smapi.exe"
+      ],
+      "window_keywords": [
+        "stardew valley",
+        "smapi"
+      ],
+      "icon": "🌾",
+      "theme_color": "#ffb300"
+    },
+    {
+      "id": "undertale",
+      "name": "Undertale",
+      "genre": "Indie RPG",
+      "executables": [
+        "undertale.exe",
+        "deltarune.exe"
+      ],
+      "window_keywords": [
+        "undertale",
+        "deltarune"
+      ],
+      "icon": "❤️",
+      "theme_color": "#ff2a5f"
+    },
+    {
+      "id": "hades",
+      "name": "Hades",
+      "genre": "Roguelike Action",
+      "executables": [
+        "hades.exe",
+        "hades2.exe"
+      ],
+      "window_keywords": [
+        "hades"
+      ],
+      "icon": "🔥",
+      "theme_color": "#e63946"
+    },
+    {
+      "id": "hollow_knight",
+      "name": "Hollow Knight",
+      "genre": "Metroidvania",
+      "executables": [
+        "hollow_knight.exe",
+        "hollowknight.exe"
+      ],
+      "window_keywords": [
+        "hollow knight"
+      ],
+      "icon": "⚔️",
+      "theme_color": "#a8dadc"
+    },
+    {
+      "id": "minecraft",
+      "name": "Minecraft",
+      "genre": "Sandbox / Survival",
+      "executables": [
+        "javaw.exe",
+        "minecraft.exe",
+        "minecraftlauncher.exe",
+        "tlauncher.exe",
+        "curseforge.exe"
+      ],
+      "window_keywords": [
+        "minecraft"
+      ],
+      "icon": "⛏️",
+      "theme_color": "#52b788"
+    },
+    {
+      "id": "cyberpunk2077",
+      "name": "Cyberpunk 2077",
+      "genre": "Open World RPG",
+      "executables": [
+        "cyberpunk2077.exe"
+      ],
+      "window_keywords": [
+        "cyberpunk 2077"
+      ],
+      "icon": "🦾",
+      "theme_color": "#fee440"
+    },
+    {
+      "id": "gta5",
+      "name": "Grand Theft Auto V",
+      "genre": "Action-Adventure",
+      "executables": [
+        "gta5.exe",
+        "playgtav.exe"
+      ],
+      "window_keywords": [
+        "grand theft auto v",
+        "gta v"
+      ],
+      "icon": "🚗",
+      "theme_color": "#2a9d8f"
+    },
+    {
+      "id": "elden_ring",
+      "name": "Elden Ring",
+      "genre": "Action RPG",
+      "executables": [
+        "eldenring.exe",
+        "start_protected_game.exe"
+      ],
+      "window_keywords": [
+        "elden ring"
+      ],
+      "icon": "💍",
+      "theme_color": "#d4af37"
+    }
+  ],
+  "custom_games": [
+    {
+      "id": "custom_1",
+      "name": "My Custom RPG",
+      "genre": "Custom Game",
+      "executables": [
+        "custom_game.exe"
+      ],
+      "window_keywords": [
+        "custom game"
+      ],
+      "icon": "🎮",
+      "theme_color": "#9d4edd",
+      "is_custom": true
+    },
+    {
+      "id": "custom_2",
+      "name": "My Custom RPG",
+      "genre": "Custom Game",
+      "executables": [
+        "custom_game.exe"
+      ],
+      "window_keywords": [
+        "custom game"
+      ],
+      "icon": "🎮",
+      "theme_color": "#9d4edd",
+      "is_custom": true
+    }
+  ]
+}

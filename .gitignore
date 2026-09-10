@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.spec
+
+# PyInstaller temporary build artifacts
+software/build/
+software/dist/
+
+# Test data & screenshots
+software/data/screenshots/*.png
+
+# IDE & OS
+.vscode/
+.idea/
+Thumbs.db
+Desktop.ini
