@@ -2,7 +2,8 @@
 Xsolla Game Recap - In-Game Bar Overlay
 Sleek, minimalist horizontal bar modeled after the NVIDIA GeForce Game Bar.
 Displays the stacked Xsolla emblem, active game title, session duration,
-and real time hardware telemetry. Zero emojis, zero clutter.
+and real time hardware telemetry.
+Features a cinematic dim backdrop covering the screen when opened. Zero emojis, zero clutter.
 """
 
 import tkinter as tk
@@ -26,6 +27,7 @@ class GameBarOverlay:
         self.on_quit_app = on_quit_app
 
         self.window: Optional[tk.Toplevel] = None
+        self.backdrop: Optional[tk.Toplevel] = None
         self.is_open = False
         self._timer_job = None
         self._logo_photo = None
@@ -42,16 +44,52 @@ class GameBarOverlay:
         else:
             self.open()
 
+    def _show_backdrop(self):
+        """Creates or shows the fullscreen semi-transparent dim backdrop."""
+        try:
+            import win32api
+            import win32con
+            x = win32api.GetSystemMetrics(win32con.SM_XVIRTUALSCREEN)
+            y = win32api.GetSystemMetrics(win32con.SM_YVIRTUALSCREEN)
+            w = win32api.GetSystemMetrics(win32con.SM_CXVIRTUALSCREEN)
+            h = win32api.GetSystemMetrics(win32con.SM_CYVIRTUALSCREEN)
+        except Exception:
+            x, y = 0, 0
+            w = self.master.winfo_screenwidth()
+            h = self.master.winfo_screenheight()
+
+        if not self.backdrop or not self.backdrop.winfo_exists():
+            self.backdrop = tk.Toplevel(self.master)
+            self.backdrop.title("Xsolla Dim Backdrop")
+            self.backdrop.configure(bg="#000000")
+            self.backdrop.overrideredirect(True)
+            self.backdrop.attributes("-topmost", True)
+            self.backdrop.attributes("-alpha", 0.55)  # Cinematic dim darkness (55% opacity)
+
+            # Clicking anywhere on the dim background or pressing ESC closes the overlay
+            self.backdrop.bind("<Button-1>", lambda e: self.close())
+            self.backdrop.bind("<Escape>", lambda e: self.close())
+
+        self.backdrop.geometry(f"{w}x{h}+{x}+{y}")
+        self.backdrop.deiconify()
+        self.backdrop.lift()
+
     def open(self):
-        """Displays the horizontal NVIDIA style GameBar."""
+        """Displays the dim backdrop and the horizontal NVIDIA style GameBar."""
+        self.is_open = True
+
+        # 1. Show the dim backdrop behind the game
+        self._show_backdrop()
+
+        # 2. Show or create the GameBar window
         if self.window and self.window.winfo_exists():
             self.window.deiconify()
+            self.backdrop.lift()
             self.window.lift()
             self.window.focus_force()
-            self.is_open = True
+            self._start_refresh_timer()
             return
 
-        self.is_open = True
         self.window = tk.Toplevel(self.master)
         self.window.title("Xsolla Game Recap")
         self.window.configure(bg="#0a0e14")
@@ -61,7 +99,7 @@ class GameBarOverlay:
         self.window.attributes("-topmost", True)
 
         # Sleek Horizontal Bar Dimensions (NVIDIA style)
-        width = 720
+        width = 750
         height = 56
         sw = self.window.winfo_screenwidth()
         x = (sw - width) // 2
@@ -73,11 +111,13 @@ class GameBarOverlay:
         self._build_bar(width, height)
         self._start_refresh_timer()
 
+        # Stack order: backdrop behind, bar in front
+        self.backdrop.lift()
         self.window.lift()
         self.window.focus_force()
 
     def close(self):
-        """Hides the GameBar."""
+        """Hides the GameBar and the dim backdrop."""
         self.is_open = False
         if self._timer_job:
             try:
@@ -89,6 +129,12 @@ class GameBarOverlay:
         if self.window and self.window.winfo_exists():
             try:
                 self.window.withdraw()
+            except Exception:
+                pass
+
+        if self.backdrop and self.backdrop.winfo_exists():
+            try:
+                self.backdrop.withdraw()
             except Exception:
                 pass
 
@@ -172,6 +218,24 @@ class GameBarOverlay:
         tk.Label(status_frame, text="STATUS", font=("Segoe UI", 7, "bold"), fg="#8b949e", bg="#0d1117").pack(anchor="w", pady=(8, 0))
         self.status_lbl = tk.Label(status_frame, text="IDLE", font=("Segoe UI", 9, "bold"), fg="#6e7681", bg="#0d1117")
         self.status_lbl.pack(anchor="w")
+
+        # 6. Close Button [X] on the far right
+        close_frame = tk.Frame(bar, bg="#0d1117", padx=12)
+        close_frame.pack(side="right", fill="y")
+        btn_close = tk.Label(
+            close_frame,
+            text="✕",
+            font=("Segoe UI", 11, "bold"),
+            fg="#8b949e",
+            bg="#0d1117",
+            cursor="hand2",
+            padx=8,
+            pady=4
+        )
+        btn_close.pack(anchor="center", expand=True)
+        btn_close.bind("<Button-1>", lambda e: self.close())
+        btn_close.bind("<Enter>", lambda e: btn_close.config(fg="#ff5c5c", bg="#21262d"))
+        btn_close.bind("<Leave>", lambda e: btn_close.config(fg="#8b949e", bg="#0d1117"))
 
     def _add_separator(self, parent):
         sep = tk.Frame(parent, bg="#21262d", width=1)

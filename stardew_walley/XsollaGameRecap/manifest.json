@@ -1,0 +1,10 @@
+{
+  "Name": "Xsolla Game Recap",
+  "Author": "Team NoClip (Xsolla Hackathon)",
+  "Version": "1.0.0",
+  "Description": "An in-game contextual recap and reminder system for returning Stardew Valley players.",
+  "UniqueID": "TeamNoClip.XsollaGameRecap",
+  "EntryDll": "XsollaGameRecap.dll",
+  "MinimumApiVersion": "4.0.0",
+  "UpdateKeys": []
+}

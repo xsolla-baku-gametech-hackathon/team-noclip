@@ -1,0 +1,782 @@
+================================================================================
+                     XSOLLA GAME RECAP - IMPLEMENTATION PLAN
+================================================================================
+Project: In-Game AI Recap System for Stardew Valley (Hackathon Prototype)
+Target Stack: SMAPI 4.x (.NET 6) + FastAPI (Python 3.13) + Google Gemini LLM
+Core Philosophy: "We don't make players remember their game. 
+                  We make the game remember the player."
+================================================================================
+
+TABLE OF CONTENTS
+--------------------------------------------------------------------------------
+1. ARCHITECTURE OVERVIEW & DATA FLOW
+2. PROMPT ENGINEERING SPECIFICATIONS
+   2.1. Primary Recap System Prompt (Strict Schema & Anti-Hallucination)
+   2.2. Few-Shot In-Context Learning Prompt
+   2.3. Heuristic / Deterministic Fallback Prompt (Offline Mode)
+   2.4. Prompt Evaluation & Guardrails
+3. PARSERS & RESOLVERS SPECIFICATIONS ("PARSE & APARSE")
+   3.1. CropResolver (ID -> Display Name & Growth State)
+   3.2. BundleParser (Community Center State & Missing Items Extraction)
+   3.3. QuestResolver (Quest Types & Expiration Calculation)
+   3.4. SocialResolver (Friendship, Birthdays & Gift Priorities)
+   3.5. SaveXmlParser (Fallback Parser for Offline / Stale Saves)
+4. DATA CONTRACTS & SCHEMAS
+   4.1. GameStateDto (C# & Pydantic)
+   4.2. RecapResponseDto (C# & Pydantic)
+5. FASTAPI MIDDLEWARE SPECIFICATION
+   5.1. Directory Structure
+   5.2. Endpoints & Caching
+   5.3. LLM Integration with Gemini SDK
+6. SMAPI C# MOD SPECIFICATION
+   6.1. Project Structure & Config
+   6.2. GameStateExtractor with Live State First
+   6.3. Asynchronous RecapApiClient & GameLoop Marshalling
+   6.4. RecapModalMenu (3-Card Visual Presentation)
+7. STEP-BY-STEP IMPLEMENTATION ROADMAP
+8. DEMO & JUDGING PRESENTATION SCRIPT
+================================================================================
+
+
+================================================================================
+1. ARCHITECTURE OVERVIEW & DATA FLOW
+================================================================================
+
+   [ Stardew Valley 1.6 Game Runtime ]
+                 │
+                 ▼
+       [ GameStateExtractor ]
+         ├── CropResolver    (Resolves IDs -> "Parsnip", "Blueberry", etc.)
+         ├── BundleParser    (Decodes CC bundle binary/strings -> Missing items)
+         ├── QuestResolver   (Extracts quest objectives & DaysLeft)
+         └── SocialResolver  (Finds birthdays & low-heart villagers)
+                 │
+                 ▼ (Optional Fallback: SaveXmlParser if runtime state not ready)
+        [ GameStateDto (JSON) ]
+                 │
+                 ▼ HTTP POST (Async / Non-blocking)
+      http://127.0.0.1:8000/api/recap
+                 │
+                 ▼
+       [ FastAPI Middleware ]
+         ├── 1. Schema Validation (Pydantic)
+         ├── 2. Cache Check (Hash of State -> Instant Response)
+         ├── 3. Gemini LLM Call (Structured JSON Output Mode)
+         └── 4. Heuristic Fallback Engine (If timeout / LLM error)
+                 │
+                 ▼
+     [ RecapResponseDto (JSON) ]
+                 │
+                 ▼ HTTP 200 Response
+        [ RecapApiClient ]
+                 │
+                 ▼ Marshalled via GameLoop.UpdateTicked
+        [ RecapModalMenu (SMAPI) ]
+         ├── Dark Translucent Backdrop (65% Black)
+         ├── Card 1: "PREVIOUSLY ON..." (2 Sentences of narrative recap)
+         ├── Card 2: "CRITICAL TODAY"   (Top 3 urgent actions: dead/ready crops, quests)
+         └── Card 3: "GOALS TRACKER"    (Active quests, CC bundle items, milestones)
+
+
+================================================================================
+2. PROMPT ENGINEERING SPECIFICATIONS
+================================================================================
+
+2.1. PRIMARY RECAP SYSTEM PROMPT (Strict Schema & Anti-Hallucination)
+--------------------------------------------------------------------------------
+ROLE:
+You are the Xsolla Game Recap engine for Stardew Valley. Your role is to act as
+a personalized, context-aware memory bridge for a player returning to their farm
+after weeks or months away. You eliminate resumption friction in under 10 seconds.
+
+STRICT FACTUAL GROUNDING RULES:
+1. ZERO HALLUCINATION: Only use facts explicitly provided in the input JSON.
+2. NEVER invent quests, items, villagers, seasons, dates, or crop states.
+3. NEVER assume the player owns an item or completed a task unless verified in the input.
+4. If a field is missing, null, or empty, ignore it gracefully.
+5. All IDs have been pre-resolved to human-readable names. Use only those names.
+
+CONTENT CONSTRAINTS:
+1. "previouslyOn": EXACTLY TWO SENTENCES.
+   - Sentence 1: Remind the player of their current temporal and financial place 
+     (e.g., "You returned to Misty Farm on Summer 18, Year 2, with 12,450g in savings.").
+   - Sentence 2: Summarize current ongoing efforts or macro-level situation 
+     (e.g., "Your farm is in the middle of harvest season while the Community Center awaits several key contributions.").
+2. "criticalPriorities": EXACTLY THREE ITEMS (or fewer if fewer exist).
+   - Priority hierarchy:
+     * HIGH: Dead crops that need clearing; crops ready for harvest today; unwatered crops.
+     * HIGH: Quests expiring today (daysLeft == 0) or tomorrow (daysLeft == 1).
+     * HIGH: A villager's birthday occurring today or tomorrow.
+     * MEDIUM: Active community center missing items that are in season.
+     * MEDIUM: Villagers with low friendship hearts (<= 2) worth talking to.
+     * LOW: Long-term farm goals and general milestones.
+   - Each priority must have:
+     * "title": Short action imperative (3-5 words max, e.g., "Harvest Ready Crops").
+     * "description": One concise informative sentence with quantities.
+     * "importance": "high" | "medium" | "low".
+3. "goalTracker":
+   - "activeQuests": Max 5 active quests formatted as "Title - X days left" (or "No time limit").
+   - "missingBundleItems": Key missing items for the Community Center.
+   - "milestones": Current overarching objectives (e.g., "Community Center: 18/30 bundles completed").
+4. FORMAT:
+   - Output MUST be valid, parseable JSON matching the schema exactly.
+   - DO NOT include markdown fences (```json ... ```) or conversational commentary.
+
+OUTPUT JSON SCHEMA:
+{
+  "success": true,
+  "previouslyOn": "string (exactly 2 sentences)",
+  "criticalPriorities": [
+    {
+      "title": "string",
+      "description": "string",
+      "importance": "high" | "medium" | "low"
+    }
+  ],
+  "goalTracker": {
+    "activeQuests": ["string"],
+    "missingBundleItems": ["string"],
+    "milestones": ["string"]
+  }
+}
+
+2.2. FEW-SHOT IN-CONTEXT LEARNING PROMPT
+--------------------------------------------------------------------------------
+[INPUT EXAMPLE 1]:
+{
+  "player": { "name": "Aykhan", "farmName": "Misty Farm", "gold": 12450 },
+  "date": { "season": "Summer", "day": 18, "year": 2, "timeOfDay": 930 },
+  "farm": { "cropCount": 47, "readyToHarvest": 8, "needsWater": 12, "deadCrops": 2 },
+  "crops": [
+    { "cropName": "Blueberry", "state": "ready", "x": 12, "y": 18 },
+    { "cropName": "Melon", "state": "needs_water", "x": 14, "y": 18 },
+    { "cropName": "Wheat", "state": "dead", "x": 15, "y": 18 }
+  ],
+  "communityCenter": {
+    "complete": false,
+    "completedBundles": 18,
+    "totalBundles": 30,
+    "missingItems": ["Red Cabbage", "Truffle", "Rabbit's Foot"]
+  },
+  "activeQuests": [
+    { "title": "Robin's Request", "description": "Bring Robin 10 Hardwood.", "daysLeft": 2, "isSpecialOrder": false }
+  ],
+  "social": {
+    "lowHeartVillagers": [{ "name": "Penny", "hearts": 2, "birthday": "Fall 2" }],
+    "upcomingBirthdays": [{ "name": "Demetrius", "hearts": 5, "birthday": "Summer 19" }]
+  }
+}
+
+[OUTPUT EXAMPLE 1]:
+{
+  "success": true,
+  "previouslyOn": "You returned to Misty Farm on Summer 18 of Year 2 with 12,450g in savings. Your farm has 47 active crops with several nearing maturity while the Community Center is more than halfway restored.",
+  "criticalPriorities": [
+    {
+      "title": "Harvest and Clear Fields",
+      "description": "8 crops are ripe for picking and 2 dead crops need clearing.",
+      "importance": "high"
+    },
+    {
+      "title": "Water Thirsty Crops",
+      "description": "12 growing crops still require watering today.",
+      "importance": "high"
+    },
+    {
+      "title": "Prepare Demetrius's Birthday Gift",
+      "description": "Demetrius celebrates his birthday tomorrow (Summer 19).",
+      "importance": "medium"
+    }
+  ],
+  "goalTracker": {
+    "activeQuests": [
+      "Robin's Request (10 Hardwood) - 2 days left"
+    ],
+    "missingBundleItems": [
+      "Red Cabbage",
+      "Truffle",
+      "Rabbit's Foot"
+    ],
+    "milestones": [
+      "Community Center Restoration: 18/30 Bundles"
+    ]
+  }
+}
+
+2.3. HEURISTIC / DETERMINISTIC FALLBACK PROMPT (Offline / Timeout Engine)
+--------------------------------------------------------------------------------
+When LLM call fails, times out (>5s), or rate limits occur, the middleware 
+executes a pure Python deterministic generator:
+
+```python
+def generate_heuristic_recap(state: GameStateDto) -> RecapResponseDto:
+    # 1. Previously On:
+    p1 = f"You returned to {state.player.farm_name} in {state.date.season} of Year {state.date.year} with {state.player.gold:,}g."
+    p2 = f"You are managing {state.farm.crop_count} crops across the farm while progressing toward your village goals."
+    previously_on = f"{p1} {p2}"
+    
+    # 2. Critical Priorities:
+    priorities = []
+    if state.farm.dead_crops > 0 or state.farm.ready_to_harvest > 0:
+        priorities.append(PriorityDto(
+            title="Tend to Harvest & Debris",
+            description=f"{state.farm.ready_to_harvest} crops ready to harvest; {state.farm.dead_crops} dead crops to remove.",
+            importance="high"
+        ))
+    if state.farm.needs_water > 0:
+        priorities.append(PriorityDto(
+            title="Water Your Crops",
+            description=f"{state.farm.needs_water} crops need water before the day ends.",
+            importance="high"
+        ))
+    if state.social.upcoming_birthdays:
+        bday = state.social.upcoming_birthdays[0]
+        priorities.append(PriorityDto(
+            title=f"{bday.name}'s Birthday",
+            description=f"{bday.name}'s birthday is coming up on {bday.birthday}.",
+            importance="medium"
+        ))
+    elif state.active_quests:
+        q = state.active_quests[0]
+        priorities.append(PriorityDto(
+            title=f"Quest: {q.title}",
+            description=f"{q.description} ({'Expires today' if q.days_left == 0 else f'{q.days_left} days left' if q.days_left > 0 else 'No time limit'}).",
+            importance="medium"
+        ))
+    elif state.community_center.missing_items:
+        items = ", ".join(state.community_center.missing_items[:2])
+        priorities.append(PriorityDto(
+            title="Community Center Supplies",
+            description=f"Work towards obtaining: {items}.",
+            importance="medium"
+        ))
+    
+    # Pad to 3 if needed
+    if len(priorities) < 3:
+        priorities.append(PriorityDto(
+            title="Explore and Socialize",
+            description="Visit Pelican Town to greet villagers and check Pierre's stock.",
+            importance="low"
+        ))
+
+    # 3. Goal Tracker
+    quests = [f"{q.title} ({q.days_left}d left)" if q.days_left >= 0 else q.title for q in state.active_quests[:5]]
+    cc_items = state.community_center.missing_items[:5]
+    milestones = [f"Community Center: {state.community_center.completed_bundles}/{state.community_center.total_bundles} Completed"]
+    
+    return RecapResponseDto(
+        success=True,
+        previously_on=previously_on,
+        critical_priorities=priorities[:3],
+        goal_tracker=GoalTrackerDto(
+            active_quests=quests,
+            missing_bundle_items=cc_items,
+            milestones=milestones
+        )
+    )
+```
+
+2.4. PROMPT EVALUATION & GUARDRAILS
+--------------------------------------------------------------------------------
+- Output Validation: Parse response with Pydantic; if validation fails, fall back to deterministic engine.
+- Latency Benchmark: Gemini 1.5 Flash / 2.0 Flash response time <= 1.2s.
+- Token Economy: Input state ~ 400-800 tokens; Output response ~ 200-300 tokens.
+
+
+================================================================================
+3. PARSERS & RESOLVERS SPECIFICATIONS ("PARSE & APARSE")
+================================================================================
+
+In Stardew Valley 1.6, internal entities frequently use qualified item IDs 
+(e.g., "(O)24" or "24" for Parsnip, internal quest IDs, unlocalized bundle strings).
+Sending raw internal IDs to the LLM confuses the model.
+We build four dedicated Resolvers/Parsers in the mod (and mirrored in Python).
+
+3.1. CropResolver (`Extraction/CropResolver.cs`)
+--------------------------------------------------------------------------------
+PURPOSE:
+Translates live `HoeDirt` and `Crop` instances into clean human-readable crop names
+and accurate lifecycle status.
+
+LOGIC:
+1. Input: `HoeDirt dirt`, `Vector2 tileLocation`.
+2. Extract Crop: `dirt.crop`. If `null`, skip.
+3. Determine Name:
+   - In Stardew Valley 1.6: `ItemRegistry.GetData(dirt.crop.indexOfHarvest.Value)?.DisplayName`
+   - Fallback: `dirt.crop.indexOfHarvest.Value` mapped to known dictionary.
+4. Determine Lifecycle State:
+   - If `dirt.crop.dead.Value` -> `"dead"`
+   - If `dirt.crop.currentPhase.Value >= dirt.crop.phaseDays.Count - 1` -> `"ready"`
+   - If `!dirt.isWatered.Value` -> `"needs_water"`
+   - If regrowable harvest available (`dirt.crop.fullyGrown.Value && dirt.crop.dayOfCurrentPhase.Value <= 0`) -> `"ready"`
+   - Otherwise -> `"growing"`
+5. Output: `CropDto { CropName, State, X, Y }`.
+
+3.2. BundleParser (`Extraction/BundleParser.cs`)
+--------------------------------------------------------------------------------
+PURPOSE:
+Parses Stardew 1.6 Community Center bundle structures without corrupting or breaking
+across patch updates.
+
+BACKGROUND:
+- `Game1.netWorldState.Value.GetUnlocalizedBundleData()` returns dictionary of bundle keys.
+- Bundle data format in Stardew:
+  Format: `Name/Reward/Ingredients/Color/SpriteIndex/DisplayName`
+  Ingredients format: `[ItemID] [Count] [Quality] ...`
+- `CommunityCenter` location keeps track of `bundles.Pairs`:
+  Boolean array of which ingredient slots are filled.
+
+PARSING LOGIC:
+1. Check if Community Center is completed:
+   `Game1.MasterPlayer.hasCompletedCommunityCenter()` or `Game1.netWorldState.Value.VisitsUntilY1Guarantee.Value`
+2. Iterate all bundles:
+   - Identify which room it belongs to (Pantry, Crafts Room, Fish Tank, Boiler Room, Vault, Bulletin Board).
+   - Read ingredient requirements: Each ingredient has `(ItemQualifiedId, RequiredQuantity)`.
+   - Check slot completion in the bundle's `bool[]` array.
+3. Map missing item IDs to localized item display names:
+   `ItemRegistry.GetData(itemId)?.DisplayName ?? itemId`
+4. Filter missing items relevant to the current season:
+   If current season is "Summer", prioritize missing Summer crops/fish.
+5. Output:
+   `CommunityCenterDto { Complete, CompletedBundles, TotalBundles, MissingItems }`.
+
+3.3. QuestResolver (`Extraction/QuestResolver.cs`)
+--------------------------------------------------------------------------------
+PURPOSE:
+Interprets quest entries in `Game1.player.questLog` and `Game1.netWorldState.Value.SpecialOrders`.
+
+BACKGROUND:
+- Stardew quests inherit from `Quest`. Subclasses include:
+  * `ItemDeliveryQuest`: target villager, item sought.
+  * `SlayMonstersQuest`: monster target, count remaining.
+  * `ResourceCollectionQuest`: resource ID, number collected.
+  * `SocializeQuest`: intro quest to talk to townspeople.
+  * `DescriptionElementList` holds dynamic text tokens.
+- `daysLeft` is not universally a simple int on all quest types:
+  * Regular billboard quests have `quest.daysLeft.Value`.
+  * Special Orders have `order.dueDate.Value - Game1.Date.TotalDays`.
+  * Story quests have no deadline -> Represent as `-1` (Indefinite/No time limit).
+
+LOGIC:
+1. For each `Quest q` in `Game1.player.questLog`:
+   - Title: `q.questTitle` or clean class name fallback.
+   - Description: `q.questDescription` or formatted objective.
+   - DaysLeft: If `q.dailyQuest.Value`, use `q.daysLeft.Value`. Else `-1`.
+   - IsSpecialOrder: `false`.
+2. For each active `SpecialOrder order` in `Game1.player.team.specialOrders`:
+   - Title: `order.GetName()`.
+   - Description: `order.GetDescription()`.
+   - DaysLeft: `Math.Max(0, order.dueDate.Value - Game1.Date.TotalDays)`.
+   - IsSpecialOrder: `true`.
+3. Output: `List<QuestDto>`.
+
+3.4. SocialResolver (`Extraction/SocialResolver.cs`)
+--------------------------------------------------------------------------------
+PURPOSE:
+Identifies high-priority social interactions so players don't miss friendship 
+milestones or birthdays.
+
+LOGIC:
+1. Scan all active NPCs in `Game1.locations`:
+   Filter: `npc.IsVillager && !npc.IsChild && !npc.IsMonster`.
+2. Evaluate Friendship:
+   `int hearts = Game1.player.getFriendshipHeartLevelForNPC(npc.Name);`
+   If `hearts <= 2`, add to `LowHeartVillagers`.
+3. Evaluate Birthdays:
+   Check `npc.Birthday_Season == Game1.currentSeason`.
+   If `npc.Birthday_Day == Game1.dayOfMonth` -> Birthday is TODAY!
+   If `npc.Birthday_Day == Game1.dayOfMonth + 1` -> Birthday is TOMORROW!
+   Add matching villagers to `UpcomingBirthdays`.
+4. Output: `SocialDto { LowHeartVillagers, UpcomingBirthdays }`.
+
+3.5. SaveXmlParser (Fallback Parser for Offline / Stale Saves)
+--------------------------------------------------------------------------------
+PURPOSE:
+Allows running the recap engine against a saved file (`<PlayerName>_<SaveID>`)
+directly without having Stardew Valley running. Ideal for:
+- Automated backend testing
+- Web dashboard or companion app view
+- Fallback if runtime mod state fails to extract.
+
+STRUCTURE OF STARDEW SAVE XML:
+- Path: `%APPDATA%/StardewValley/Saves/<SaveName>/<SaveName>`
+- Key XML Tags:
+  * `<SaveGame>`
+    * `<player>`: `<name>`, `<farmName>`, `<money>`, `<friendshipData>`
+    * `<currentSeason>`, `<dayOfMonth>`, `<year>`, `<timeOfDay>`
+    * `<locations><GameLocation xsi:type="Farm">`:
+      `<terrainFeatures><item><value><TerrainFeature xsi:type="HoeDirt">`
+    * `<communityCenter>`: `<bundles>`
+    * `<questLog><Quest>`: active quests
+
+PARSING STRATEGY:
+- Implemented in Python (`backend/services/xml_parser.py`) using `defusedxml` / `xml.etree.ElementTree`.
+- Converts XML tree into the exact same `GameStateDto` expected by the recap service.
+
+
+================================================================================
+4. DATA CONTRACTS & SCHEMAS
+================================================================================
+
+4.1. GameStateDto
+--------------------------------------------------------------------------------
+C# Definition:
+```csharp
+namespace XsollaGameRecap.Models;
+
+public sealed class GameStateDto
+{
+    public PlayerDto Player { get; set; } = new();
+    public DateTimeDto Date { get; set; } = new();
+    public FarmDto Farm { get; set; } = new();
+    public List<CropDto> Crops { get; set; } = new();
+    public CommunityCenterDto CommunityCenter { get; set; } = new();
+    public List<QuestDto> ActiveQuests { get; set; } = new();
+    public SocialDto Social { get; set; } = new();
+}
+
+public sealed class PlayerDto
+{
+    public string Name { get; set; } = "";
+    public string FarmName { get; set; } = "";
+    public int Gold { get; set; }
+}
+
+public sealed class DateTimeDto
+{
+    public string Season { get; set; } = "";
+    public int Day { get; set; }
+    public int Year { get; set; }
+    public int TimeOfDay { get; set; }
+}
+
+public sealed class FarmDto
+{
+    public int CropCount { get; set; }
+    public int ReadyToHarvest { get; set; }
+    public int NeedsWater { get; set; }
+    public int DeadCrops { get; set; }
+}
+
+public sealed class CropDto
+{
+    public string CropName { get; set; } = "";
+    public string State { get; set; } = ""; // "ready", "needs_water", "dead", "growing"
+    public int X { get; set; }
+    public int Y { get; set; }
+}
+
+public sealed class CommunityCenterDto
+{
+    public bool Complete { get; set; }
+    public int CompletedBundles { get; set; }
+    public int TotalBundles { get; set; }
+    public List<string> MissingItems { get; set; } = new();
+}
+
+public sealed class QuestDto
+{
+    public string Title { get; set; } = "";
+    public string Description { get; set; } = "";
+    public int DaysLeft { get; set; } // -1 for no deadline, 0 for today, 1+ for remaining
+    public bool IsSpecialOrder { get; set; }
+}
+
+public sealed class SocialDto
+{
+    public List<VillagerDto> LowHeartVillagers { get; set; } = new();
+    public List<VillagerDto> UpcomingBirthdays { get; set; } = new();
+}
+
+public sealed class VillagerDto
+{
+    public string Name { get; set; } = "";
+    public int Hearts { get; set; }
+    public string Birthday { get; set; } = "";
+}
+```
+
+Pydantic Definition (`backend/models.py`):
+```python
+from pydantic import BaseModel, Field
+from typing import List, Optional
+
+class PlayerDto(BaseModel):
+    name: str = ""
+    farm_name: str = Field(default="", alias="farmName")
+    gold: int = 0
+
+class DateTimeDto(BaseModel):
+    season: str = ""
+    day: int = 1
+    year: int = 1
+    time_of_day: int = Field(default=600, alias="timeOfDay")
+
+class FarmDto(BaseModel):
+    crop_count: int = Field(default=0, alias="cropCount")
+    ready_to_harvest: int = Field(default=0, alias="readyToHarvest")
+    needs_water: int = Field(default=0, alias="needsWater")
+    dead_crops: int = Field(default=0, alias="deadCrops")
+
+class CropDto(BaseModel):
+    crop_name: str = Field(default="", alias="cropName")
+    state: str = "growing"
+    x: int = 0
+    y: int = 0
+
+class CommunityCenterDto(BaseModel):
+    complete: bool = False
+    completed_bundles: int = Field(default=0, alias="completedBundles")
+    total_bundles: int = Field(default=30, alias="totalBundles")
+    missing_items: List[str] = Field(default_factory=list, alias="missingItems")
+
+class QuestDto(BaseModel):
+    title: str = ""
+    description: str = ""
+    days_left: int = Field(default=-1, alias="daysLeft")
+    is_special_order: bool = Field(default=False, alias="isSpecialOrder")
+
+class VillagerDto(BaseModel):
+    name: str = ""
+    hearts: int = 0
+    birthday: str = ""
+
+class SocialDto(BaseModel):
+    low_heart_villagers: List[VillagerDto] = Field(default_factory=list, alias="lowHeartVillagers")
+    upcoming_birthdays: List[VillagerDto] = Field(default_factory=list, alias="upcomingBirthdays")
+
+class GameStateDto(BaseModel):
+    player: PlayerDto = Field(default_factory=PlayerDto)
+    date: DateTimeDto = Field(default_factory=DateTimeDto)
+    farm: FarmDto = Field(default_factory=FarmDto)
+    crops: List[CropDto] = Field(default_factory=list)
+    community_center: CommunityCenterDto = Field(default_factory=CommunityCenterDto, alias="communityCenter")
+    active_quests: List[QuestDto] = Field(default_factory=list, alias="activeQuests")
+    social: SocialDto = Field(default_factory=SocialDto)
+
+    class Config:
+        populate_by_name = True
+```
+
+4.2. RecapResponseDto
+--------------------------------------------------------------------------------
+C# Definition:
+```csharp
+namespace XsollaGameRecap.Models;
+
+public sealed class RecapResponseDto
+{
+    public bool Success { get; set; } = true;
+    public string PreviouslyOn { get; set; } = "";
+    public List<PriorityDto> CriticalPriorities { get; set; } = new();
+    public GoalTrackerDto GoalTracker { get; set; } = new();
+    public string? Error { get; set; }
+}
+
+public sealed class PriorityDto
+{
+    public string Title { get; set; } = "";
+    public string Description { get; set; } = "";
+    public string Importance { get; set; } = "medium"; // "high", "medium", "low"
+}
+
+public sealed class GoalTrackerDto
+{
+    public List<string> ActiveQuests { get; set; } = new();
+    public List<string> MissingBundleItems { get; set; } = new();
+    public List<string> Milestones { get; set; } = new();
+}
+```
+
+Pydantic Definition (`backend/models.py`):
+```python
+class PriorityDto(BaseModel):
+    title: str
+    description: str
+    importance: str = "medium"
+
+class GoalTrackerDto(BaseModel):
+    active_quests: List[str] = Field(default_factory=list, alias="activeQuests")
+    missing_bundle_items: List[str] = Field(default_factory=list, alias="missingBundleItems")
+    milestones: List[str] = Field(default_factory=list)
+
+    class Config:
+        populate_by_name = True
+
+class RecapResponseDto(BaseModel):
+    success: bool = True
+    previously_on: str = Field(..., alias="previouslyOn")
+    critical_priorities: List[PriorityDto] = Field(default_factory=list, alias="criticalPriorities")
+    goal_tracker: GoalTrackerDto = Field(default_factory=GoalTrackerDto, alias="goalTracker")
+    error: Optional[str] = None
+
+    class Config:
+        populate_by_name = True
+```
+
+
+================================================================================
+5. FASTAPI MIDDLEWARE SPECIFICATION
+================================================================================
+
+5.1. Directory Structure
+--------------------------------------------------------------------------------
+backend/
+├── main.py                   # FastAPI app entrypoint, CORS, routes
+├── config.py                 # App settings, Gemini API Key, timeouts
+├── models.py                 # Pydantic schemas for state and recap
+├── services/
+│   ├── __init__.py
+│   ├── llm_service.py        # Gemini API client with structured outputs
+│   ├── heuristic_service.py  # Instant deterministic recap fallback
+│   ├── cache_service.py      # LRU / In-memory state hash cache
+│   └── xml_parser.py         # Offline save XML parser
+├── tests/
+│   ├── test_api.py           # Unit tests for endpoints
+│   ├── test_parsers.py       # Unit tests for resolvers and xml parser
+│   └── mock_data.py          # Sample GameStateDto payloads
+├── requirements.txt          # fastapi, uvicorn, pydantic, google-genai, pytest
+└── .env.example              # GEMINI_API_KEY=...
+
+5.2. Endpoints
+--------------------------------------------------------------------------------
+- POST /api/recap:
+  Accepts: `GameStateDto`
+  Returns: `RecapResponseDto`
+  Flow:
+    1. Compute state hash = MD5(player.gold + date.day + season + cropCount).
+    2. If hash in Cache and cache age < 60s -> return cached response immediately.
+    3. Call `llm_service.generate_recap(state)`.
+    4. If LLM fails or times out (> 4.0s), call `heuristic_service.generate_heuristic_recap(state)`.
+    5. Cache and return.
+
+- POST /api/recap/from-xml:
+  Accepts: XML file upload or save path string.
+  Returns: `RecapResponseDto`.
+
+- GET /health:
+  Returns: `{"status": "healthy", "llm_connected": true, "version": "1.0.0"}`.
+
+
+================================================================================
+6. SMAPI C# MOD SPECIFICATION
+================================================================================
+
+6.1. Project Structure
+--------------------------------------------------------------------------------
+XsollaGameRecap/
+├── XsollaGameRecap.csproj    # Targets net6.0, Pathoschild.Stardew.ModBuildConfig
+├── manifest.json             # SMAPI 4.0.0 manifest
+├── ModConfig.cs              # Keybind (F8), API URL, Timeout
+├── ModEntry.cs               # Entrypoint, input handling, game loop marshalling
+├── Models/
+│   ├── GameStateDto.cs
+│   └── RecapResponseDto.cs
+├── Extraction/
+│   ├── GameStateExtractor.cs # Orchestrates extraction from live Game1 state
+│   ├── CropResolver.cs       # Resolves crop IDs and growth phases
+│   ├── BundleParser.cs       # Resolves CC bundles and missing items
+│   ├── QuestResolver.cs      # Resolves active quests and deadlines
+│   └── SocialResolver.cs     # Resolves birthdays and friendship hearts
+├── Services/
+│   └── RecapApiClient.cs     # Non-blocking async HttpClient to FastAPI
+└── UI/
+    └── RecapModalMenu.cs     # Custom IClickableMenu with 3 cards & Xsolla branding
+
+6.2. Game State Extraction Best Practices
+--------------------------------------------------------------------------------
+- LIVE RUNTIME STATE FIRST: Access `Game1.player`, `Game1.getFarm()`, `Game1.netWorldState`
+  directly rather than reading save files from disk.
+- THREAD SAFETY: Game state extraction MUST occur on the game thread before dispatching
+  the network call to `Task.Run`.
+- SAFE DISPATCH: Network call runs in background task; results are stored in 
+  `pendingResponse` and handed to `RecapModalMenu` inside `Events.GameLoop.UpdateTicked`.
+
+6.3. UI Design Specifications for `RecapModalMenu`
+--------------------------------------------------------------------------------
+- Viewport Dims: Fullscreen fade overlay (Color.Black * 0.65f).
+- Main Canvas: Centered native dialog panel with 70px margin.
+- Branded Header:
+  * "XSOLLA GAME RECAP" in dialogueFont with gold drop-shadow.
+  * "Welcome back, {FarmerName}! Here is what happened since your last visit."
+- The 3 Cards:
+  * Card 1: "PREVIOUSLY ON..." - Clean narrative background.
+  * Card 2: "CRITICAL TODAY"   - Action-oriented urgency list (numbered 1, 2, 3).
+  * Card 3: "GOALS TRACKER"    - Active quests and Community Center progress.
+- Dismiss Button: "[ Resume Playing ]" primary button and "X" in upper right.
+
+
+================================================================================
+7. STEP-BY-STEP IMPLEMENTATION ROADMAP
+================================================================================
+
+PHASE 1: FASTAPI MIDDLEWARE & PARSERS (Backend Foundation)
+--------------------------------------------------------------------------------
+[x] 1.1. Create `backend/requirements.txt` and install dependencies.
+[x] 1.2. Implement `backend/models.py` (Pydantic DTOs for GameState and RecapResponse).
+[x] 1.3. Implement `backend/services/heuristic_service.py` (deterministic generator).
+[x] 1.4. Implement `backend/services/llm_service.py` (Gemini API with strict JSON schema).
+[x] 1.5. Implement `backend/services/xml_parser.py` (offline save XML parsing).
+[x] 1.6. Implement `backend/main.py` with `/api/recap` and `/health` endpoints.
+[x] 1.7. Add test suite in `backend/tests/` to verify mock state processing.
+
+PHASE 2: SMAPI MOD EXTRACTION & RESOLVERS (.NET 6 C#)
+--------------------------------------------------------------------------------
+[x] 2.1. Scaffold `XsollaGameRecap/` project with `XsollaGameRecap.csproj` and `manifest.json`.
+[x] 2.2. Implement C# DTOs in `XsollaGameRecap/Models/`.
+[x] 2.3. Implement `CropResolver.cs` to map Stardew 1.6 IDs to crop names & status.
+[x] 2.4. Implement `BundleParser.cs` to decode Community Center missing items.
+[x] 2.5. Implement `QuestResolver.cs` to resolve active quests and deadlines.
+[x] 2.6. Implement `SocialResolver.cs` to scan birthdays and low-heart villagers.
+[x] 2.7. Implement `GameStateExtractor.cs` coordinating all resolvers.
+
+PHASE 3: NETWORKING & THREAD-SAFE ORCHESTRATION
+--------------------------------------------------------------------------------
+[x] 3.1. Implement `RecapApiClient.cs` with async `PostAsJsonAsync` and timeout handler.
+[x] 3.2. Implement `ModEntry.cs` with F8 keybind and safe `UpdateTicked` response marshalling.
+
+PHASE 4: UI & BRANDED PRESENTATION
+--------------------------------------------------------------------------------
+[x] 4.1. Implement `RecapModalMenu.cs` with 3-card layout, shadows, and loading animation.
+[x] 4.2. Add sound effects (`Game1.playSound("bigDeSelect")`, `"coin"`).
+[x] 4.3. Test keyboard shortcuts (Escape, F8 to close/re-open).
+
+PHASE 5: ADVANCED POLISH & GAME MENU INTEGRATION (Bonus)
+--------------------------------------------------------------------------------
+[x] 5.1. Inject branded Xsolla recap tab button into Stardew's native GameMenu tabs.
+[x] 5.2. Add caching layer to prevent redundant LLM invocations on repeated F8 presses.
+
+
+================================================================================
+8. DEMO & JUDGING PRESENTATION SCRIPT
+================================================================================
+
+SCENE 1: THE RESUMPTION PROBLEM (0:00 - 0:30)
+- Action: Launch Stardew Valley into a realistic Year 2 Summer save file.
+- Speaker: "Imagine you haven't played this save for six months. You walk around 
+  your farm, open your bags, look at your quests, and you feel overwhelmed. 
+  What was I growing? Who did I need to talk to? What bundle was I building?
+  This 'resumption friction' is where games lose returning players forever."
+
+SCENE 2: THE RECAP ACTIVATION (0:30 - 1:00)
+- Action: Press F8 (or click the Xsolla Recap tab in the menu).
+- Modal smoothly darkens the screen and renders the 3 Xsolla Recap cards in under 1 second.
+- Speaker: "With Xsolla Game Recap, one click instantly orients the player:
+  1. PREVIOUSLY ON: A 2-sentence narrative context of their farm and financial standing.
+  2. CRITICAL TODAY: The exact 3 things that demand attention right now—your ready 
+     blueberries, your thirsty melons, and Demetrius's birthday tomorrow.
+  3. GOALS TRACKER: Exactly what quests and Community Center items remain."
+
+SCENE 3: THE TECHNICAL ARCHITECTURE & BUSINESS VALUE (1:00 - 1:45)
+- Action: Display architecture diagram (SMAPI live state -> Resolvers -> FastAPI -> Gemini).
+- Speaker: "Under the hood:
+  - We extract 100% live Game1 memory state—no stale XML files.
+  - Dedicated Resolvers eliminate raw IDs before reaching the LLM.
+  - Gemini operates under strict JSON schemas with 0% hallucination risk.
+  - We built an instant heuristic fallback that guarantees 100% uptime even offline."
+
+SCENE 4: CLOSING PITCH (1:45 - 2:00)
+- Speaker: "We don't make players remember their game. 
+  We make the game remember the player. 
+  Thank you."
+================================================================================
