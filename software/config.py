@@ -21,8 +21,8 @@ ASSETS_DIR = BUNDLE_DIR / "assets"
 DOCUMENTS_DIR = Path.home() / "Documents"
 RECAP_DIR = DOCUMENTS_DIR / "XSOLLA_gamerecap"
 SESSIONS_DIR = RECAP_DIR / "sessions"
-SCREENSHOTS_DIR = RECAP_DIR / "captures"
-RECORDINGS_DIR = SCREENSHOTS_DIR  # Unified captures folder for both screenshots and video clips
+RECORDINGS_DIR = RECAP_DIR / "recordings"  # Dedicated recordings & captures folder
+SCREENSHOTS_DIR = RECORDINGS_DIR           # Unified under recordings directory
 CONFIG_FILE = RECAP_DIR / "config.json"
 
 DEFAULT_CONFIG = {
@@ -43,8 +43,9 @@ DEFAULT_CONFIG = {
 def ensure_data_dir():
     RECAP_DIR.mkdir(parents=True, exist_ok=True)
     SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
-    SCREENSHOTS_DIR.mkdir(parents=True, exist_ok=True)
     RECORDINGS_DIR.mkdir(parents=True, exist_ok=True)
+    # Also maintain legacy captures dir if exists
+    (RECAP_DIR / "captures").mkdir(parents=True, exist_ok=True)
 
 
 def load_config() -> dict:
