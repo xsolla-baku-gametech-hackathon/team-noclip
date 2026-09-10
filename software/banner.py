@@ -13,7 +13,7 @@ from PIL import Image, ImageTk
 import win32gui
 import win32con
 
-from config import load_config, ASSETS_DIR
+from config import load_config, ASSETS_DIR, make_window_invisible_to_capture
 
 
 class WatchingBanner:
@@ -25,7 +25,34 @@ class WatchingBanner:
 
     def show(self, game_name: str, shortcut: str = "Ctrl+Shift+X"):
         """Triggers the right edge slide and fade in toast notification."""
-        self.master.after(0, lambda: self._create_and_animate(game_name, shortcut))
+        self.master.after(0, lambda: self._create_and_animate(
+            title="Xsolla Game Recap is Watching",
+            subtitle=f"Hooked: {game_name}  |  Press {shortcut}"
+        ))
+
+    def show_capture(self, game_name: str, hint: str = "Saved in High Quality • [F11]"):
+        """Triggers toast notification when a high-quality screenshot is captured."""
+        self.master.after(0, lambda: self._create_and_animate(
+            title="📸 Screenshot Saved!",
+            subtitle=f"{game_name}  |  {hint}",
+            title_color="#70e1ff"
+        ))
+
+    def show_record_started(self, game_name: str, shortcut: str = "F9"):
+        """Triggers toast notification when video recording begins."""
+        self.master.after(0, lambda: self._create_and_animate(
+            title="🔴 Video Recording Started",
+            subtitle=f"{game_name}  |  Press [{shortcut}] to stop & save",
+            title_color="#ff453a"
+        ))
+
+    def show_record_stopped(self, filename: str, duration_str: str):
+        """Triggers toast notification when video recording finishes and saves."""
+        self.master.after(0, lambda: self._create_and_animate(
+            title="💾 Video Saved Successfully!",
+            subtitle=f"{filename} ({duration_str})  |  Saved to Recordings",
+            title_color="#30d158"
+        ))
 
     def _play_chime(self):
         try:
@@ -38,7 +65,7 @@ class WatchingBanner:
         except Exception:
             pass
 
-    def _create_and_animate(self, game_name: str, shortcut: str):
+    def _create_and_animate(self, title: str, subtitle: str, title_color: str = "#ffffff"):
         if self.window and self.window.winfo_exists():
             try:
                 self.window.destroy()
@@ -52,7 +79,7 @@ class WatchingBanner:
         self.window.configure(bg="#0c1015")
 
         # Dimensions & Right-Edge Alignment
-        width = 390
+        width = 410
         height = 68
         screen_w = self.window.winfo_screenwidth()
         target_x = screen_w - width - 24
@@ -72,6 +99,7 @@ class WatchingBanner:
             win32gui.SetWindowLong(hwnd, win32con.GWL_EXSTYLE, style)
         except Exception:
             pass
+        make_window_invisible_to_capture(self.window)
 
         # Sleek Minimalist Canvas
         canvas = tk.Canvas(self.window, width=width, height=height, bg="#0c1015", highlightthickness=0)
@@ -96,11 +124,11 @@ class WatchingBanner:
                 self._logo_photo = None
 
         # Clean Typography
-        canvas.create_text(text_x, 22, text="Xsolla Game Recap is Watching",
-                           fill="#ffffff", font=("Segoe UI", 10, "bold"), anchor="w")
+        canvas.create_text(text_x, 22, text=title,
+                           fill=title_color, font=("Segoe UI", 10, "bold"), anchor="w")
 
-        short_game = (game_name[:22] + "...") if len(game_name) > 22 else game_name
-        canvas.create_text(text_x, 46, text=f"Hooked: {short_game}  |  Press {shortcut}",
+        short_sub = (subtitle[:36] + "...") if len(subtitle) > 36 else subtitle
+        canvas.create_text(text_x, 46, text=short_sub,
                            fill="#8ba4b6", font=("Segoe UI", 9), anchor="w")
 
         # Subtle audio cue

@@ -1,7 +1,8 @@
 """
 Xsolla Game Recap - Main Application Entrypoint
-Coordinates background game detection, the right edge fade in toast banner,
-the minimalist in-game GameBar HUD, and the Windows System Tray navbar icon.
+Coordinates background game detection, right edge fade in toast banner,
+the minimalist in-game GameBar HUD with dim backdrop, in-game screenshot capture,
+in-game MP4 video recording, photo album gallery, and Windows System Tray navbar icon.
 """
 
 import sys
@@ -22,6 +23,9 @@ from banner import WatchingBanner
 from gamebar import GameBarOverlay
 from hotkey import GlobalHotkeyListener
 from tray import SystemTrayIcon
+from polaroid_service import PolaroidService
+from video_recorder import VideoRecorderService
+from album_viewer import AlbumViewerWindow
 
 
 class XsollaGameRecapApp:
@@ -35,24 +39,47 @@ class XsollaGameRecapApp:
 
         # Subsystems
         self.recap_mgr = RecapManager()
+        self.polaroid_svc = PolaroidService()
+        self.video_rec = VideoRecorderService(on_state_change=self._on_record_state_change)
         self.banner = WatchingBanner(self.root)
+        self.album_viewer = AlbumViewerWindow(
+            self.root,
+            self.polaroid_svc,
+            on_capture_request=self._on_capture_requested,
+            on_record_request=self._on_record_toggled,
+            video_recorder=self.video_rec
+        )
+
         self.detector = GameDetector(
             on_game_launched=self._on_game_launched,
             on_game_closed=self._on_game_closed
         )
+
         self.gamebar = GameBarOverlay(
             self.root,
             self.detector,
             self.recap_mgr,
-            on_quit_app=self.shutdown
+            on_quit_app=self.shutdown,
+            on_capture=self._on_capture_requested,
+            on_open_album=self.album_viewer.open,
+            on_toggle_record=self._on_record_toggled,
+            video_recorder=self.video_rec
         )
-        self.hotkey_listener = GlobalHotkeyListener(on_hotkey=self._on_hotkey)
+
+        self.hotkey_listener = GlobalHotkeyListener(
+            on_hotkey=self._on_hotkey,
+            on_capture=self._on_capture_requested,
+            on_record=self._on_record_toggled
+        )
 
         # Windows System Tray Integration
         self.tray = SystemTrayIcon(
             on_open_gamebar=self.gamebar.open,
             on_test_banner=self._trigger_test_banner,
-            on_quit=self.shutdown
+            on_quit=self.shutdown,
+            on_capture=self._on_capture_requested,
+            on_open_album=self.album_viewer.open,
+            on_toggle_record=self._on_record_toggled
         )
 
         # Start listeners, watchers and tray
@@ -63,8 +90,10 @@ class XsollaGameRecapApp:
         print("==========================================================")
         print("  XSOLLA GAME RECAP ACTIVE")
         print("  Background game detection: ON")
-        print("  System Tray Icon: Active in Windows taskbar navbar")
-        print("  In-Game Shortcut: [Ctrl + Shift + X] (or Alt + X)")
+        print("  System Tray Icon: Active in Windows taskbar")
+        print("  Overlay Shortcut: [Ctrl + Shift + X] (or Alt + X)")
+        print("  Screenshot Capture: [F11] (or Ctrl + Shift + S)")
+        print("  Video Recording: [F9] (or Ctrl + Shift + R)")
         print("==========================================================")
 
         if open_immediately:
@@ -78,11 +107,54 @@ class XsollaGameRecapApp:
 
     def _on_game_closed(self, game: dict):
         print(f"[App] Game Exited: {game.get('name')}")
+        if self.video_rec.is_recording:
+            self._on_record_toggled()
         self.recap_mgr.end_session()
 
     def _on_hotkey(self):
         """Called when Ctrl+Shift+X or Alt+X is pressed anywhere in Windows."""
         self.gamebar.toggle()
+
+    def _on_capture_requested(self):
+        """Called when F11 or Ctrl+Shift+S is pressed, or SNAP button clicked."""
+        active = self.detector.active_game
+        game_name = active.get("name") if active else "Highlight Capture"
+        duration = self.detector.get_session_duration_str() if active else "00:00:00"
+
+        result = self.polaroid_svc.capture_memory(game_name=game_name, session_duration=duration)
+        if result:
+            self.recap_mgr.add_event(f"Screenshot Saved: {result['filename']}")
+            self.banner.show_capture(game_name, hint="Saved in High Quality • [F11]")
+
+            # If album window is open, refresh it
+            if self.album_viewer.window and self.album_viewer.window.winfo_exists():
+                self.album_viewer._refresh_content()
+
+    def _on_record_toggled(self):
+        """Called when F9 or Ctrl+Shift+R is pressed, or REC button clicked."""
+        active = self.detector.active_game
+        game_name = active.get("name") if active else "Gameplay Clip"
+
+        if self.video_rec.is_recording:
+            # Stop recording
+            result = self.video_rec.stop_recording()
+            if result:
+                self.recap_mgr.add_event(f"Video Clip Saved: {result['filename']} ({result['duration_str']})")
+                self.banner.show_record_stopped(result["filename"], result["duration_str"])
+                if self.album_viewer.window and self.album_viewer.window.winfo_exists():
+                    self.album_viewer._refresh_content()
+        else:
+            # Start recording
+            started = self.video_rec.start_recording(game_name=game_name)
+            if started:
+                self.banner.show_record_started(game_name, shortcut="F9")
+                if self.album_viewer.window and self.album_viewer.window.winfo_exists():
+                    self.album_viewer._refresh_content()
+
+    def _on_record_state_change(self, is_recording: bool, duration_str: str):
+        """Callback from video recorder on start/stop."""
+        if self.album_viewer.window and self.album_viewer.window.winfo_exists():
+            self.album_viewer._refresh_content()
 
     def _trigger_test_banner(self):
         active = self.detector.active_game
@@ -97,6 +169,8 @@ class XsollaGameRecapApp:
 
     def shutdown(self):
         print("\n[App] Shutting down Xsolla Game Recap...")
+        if hasattr(self, 'video_rec') and self.video_rec.is_recording:
+            self.video_rec.stop_recording()
         self.detector.stop_monitoring()
         self.hotkey_listener.stop()
         self.tray.stop()

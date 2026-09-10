@@ -23,6 +23,7 @@ DOCUMENTS_DIR = Path.home() / "Documents"
 RECAP_DIR = DOCUMENTS_DIR / "XSOLLA_gamerecap"
 SESSIONS_DIR = RECAP_DIR / "sessions"
 SCREENSHOTS_DIR = RECAP_DIR / "captures"
+RECORDINGS_DIR = SCREENSHOTS_DIR  # Unified captures folder for both screenshots and video clips
 CONFIG_FILE = RECAP_DIR / "config.json"
 
 DEFAULT_CONFIG = {
@@ -30,6 +31,8 @@ DEFAULT_CONFIG = {
     "version": "1.3.0",
     "hotkey": "Ctrl+Shift+X",
     "hotkey_alt": "Alt+X",
+    "hotkey_record": "F9",
+    "hotkey_capture": "F11",
     "toast_duration_ms": 3000,
     "enable_toast_sound": True,
     "scan_interval_sec": 1.0,
@@ -42,6 +45,7 @@ def ensure_data_dir():
     RECAP_DIR.mkdir(parents=True, exist_ok=True)
     SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
     SCREENSHOTS_DIR.mkdir(parents=True, exist_ok=True)
+    RECORDINGS_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def load_config() -> dict:
@@ -95,3 +99,27 @@ def register_custom_app(name: str, executable: str):
     custom_list.append(entry)
     cfg["custom_apps"] = custom_list
     save_config(cfg)
+
+
+def make_window_invisible_to_capture(window) -> bool:
+    """
+    Excludes the given Tkinter window from all screen captures, screenshots,
+    and video recording using the Windows DWM SetWindowDisplayAffinity API.
+    The window remains 100% visible and interactive for the player in real-time,
+    but is completely invisible in captured PNGs, MP4 clips, and screen shares.
+    """
+    try:
+        import ctypes
+        window.update_idletasks()
+        hwnd = window.winfo_id()
+        parent = ctypes.windll.user32.GetParent(hwnd)
+        target_hwnd = parent if parent else hwnd
+
+        WDA_EXCLUDEFROMCAPTURE = 0x00000011  # 17 (Windows 10 2004+ / Windows 11)
+        res = ctypes.windll.user32.SetWindowDisplayAffinity(target_hwnd, WDA_EXCLUDEFROMCAPTURE)
+        if not res and hwnd != target_hwnd:
+            ctypes.windll.user32.SetWindowDisplayAffinity(hwnd, WDA_EXCLUDEFROMCAPTURE)
+        return True
+    except Exception as err:
+        print(f"[WindowAffinity] Error excluding window from capture: {err}")
+        return False

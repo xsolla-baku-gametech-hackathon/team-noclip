@@ -10,7 +10,7 @@ import tkinter as tk
 from PIL import Image, ImageTk
 from typing import Optional, Callable
 
-from config import ASSETS_DIR
+from config import ASSETS_DIR, make_window_invisible_to_capture
 from detector import GameDetector
 from recap_manager import RecapManager
 
@@ -20,11 +20,20 @@ class GameBarOverlay:
                  master: tk.Tk,
                  detector: GameDetector,
                  recap_mgr: RecapManager,
-                 on_quit_app: Optional[Callable] = None):
+                 on_quit_app: Optional[Callable] = None,
+                 on_capture: Optional[Callable] = None,
+                 on_open_album: Optional[Callable] = None,
+                 on_toggle_record: Optional[Callable] = None,
+                 video_recorder: Optional[object] = None):
         self.master = master
         self.detector = detector
         self.recap_mgr = recap_mgr
         self.on_quit_app = on_quit_app
+        self.on_capture = on_capture
+        self.on_open_album = on_open_album
+        self.on_toggle_record = on_toggle_record
+        self.video_rec = video_recorder
+        self.btn_rec = None
 
         self.window: Optional[tk.Toplevel] = None
         self.backdrop: Optional[tk.Toplevel] = None
@@ -69,10 +78,12 @@ class GameBarOverlay:
             # Clicking anywhere on the dim background or pressing ESC closes the overlay
             self.backdrop.bind("<Button-1>", lambda e: self.close())
             self.backdrop.bind("<Escape>", lambda e: self.close())
+            make_window_invisible_to_capture(self.backdrop)
 
         self.backdrop.geometry(f"{w}x{h}+{x}+{y}")
         self.backdrop.deiconify()
         self.backdrop.lift()
+        make_window_invisible_to_capture(self.backdrop)
 
     def open(self):
         """Displays the dim backdrop and the horizontal NVIDIA style GameBar."""
@@ -88,6 +99,7 @@ class GameBarOverlay:
             self.window.lift()
             self.window.focus_force()
             self._start_refresh_timer()
+            make_window_invisible_to_capture(self.window)
             return
 
         self.window = tk.Toplevel(self.master)
@@ -99,7 +111,7 @@ class GameBarOverlay:
         self.window.attributes("-topmost", True)
 
         # Sleek Horizontal Bar Dimensions (NVIDIA style)
-        width = 750
+        width = 980
         height = 56
         sw = self.window.winfo_screenwidth()
         x = (sw - width) // 2
@@ -115,6 +127,7 @@ class GameBarOverlay:
         self.backdrop.lift()
         self.window.lift()
         self.window.focus_force()
+        make_window_invisible_to_capture(self.window)
 
     def close(self):
         """Hides the GameBar and the dim backdrop."""
@@ -219,7 +232,64 @@ class GameBarOverlay:
         self.status_lbl = tk.Label(status_frame, text="IDLE", font=("Segoe UI", 9, "bold"), fg="#6e7681", bg="#0d1117")
         self.status_lbl.pack(anchor="w")
 
-        # 6. Close Button [X] on the far right
+        self._add_separator(bar)
+
+        # 6. Quick Action Buttons: [📸 SNAP] & [🖼️ ALBUM]
+        action_frame = tk.Frame(bar, bg="#0d1117", padx=12)
+        action_frame.pack(side="left", fill="y")
+        action_frame.bind("<Button-1>", self._start_drag)
+        action_frame.bind("<B1-Motion>", self._on_drag)
+
+        btn_snap = tk.Label(
+            action_frame,
+            text="📸 SNAP (F11)",
+            font=("Segoe UI", 8, "bold"),
+            fg="#f0f6fc",
+            bg="#21262d",
+            cursor="hand2",
+            padx=10,
+            pady=4
+        )
+        btn_snap.pack(side="left", pady=12, padx=3)
+        if self.on_capture:
+            btn_snap.bind("<Button-1>", lambda e: self.on_capture())
+        btn_snap.bind("<Enter>", lambda e: btn_snap.config(bg="#70e1ff", fg="#0d1117"))
+        btn_snap.bind("<Leave>", lambda e: btn_snap.config(bg="#21262d", fg="#f0f6fc"))
+
+        # Video Record Toggle Button
+        self.btn_rec = tk.Label(
+            action_frame,
+            text="🔴 REC (F9)",
+            font=("Segoe UI", 8, "bold"),
+            fg="#ff5c5c",
+            bg="#21262d",
+            cursor="hand2",
+            padx=10,
+            pady=4
+        )
+        self.btn_rec.pack(side="left", pady=12, padx=3)
+        if self.on_toggle_record:
+            self.btn_rec.bind("<Button-1>", lambda e: self.on_toggle_record())
+        self.btn_rec.bind("<Enter>", lambda e: self._on_rec_hover(True))
+        self.btn_rec.bind("<Leave>", lambda e: self._on_rec_hover(False))
+
+        btn_album = tk.Label(
+            action_frame,
+            text="🖼️ ALBUM",
+            font=("Segoe UI", 8, "bold"),
+            fg="#f0f6fc",
+            bg="#21262d",
+            cursor="hand2",
+            padx=10,
+            pady=4
+        )
+        btn_album.pack(side="left", pady=12, padx=3)
+        if self.on_open_album:
+            btn_album.bind("<Button-1>", lambda e: self.on_open_album())
+        btn_album.bind("<Enter>", lambda e: btn_album.config(bg="#30d158", fg="#0d1117"))
+        btn_album.bind("<Leave>", lambda e: btn_album.config(bg="#21262d", fg="#f0f6fc"))
+
+        # 7. Close Button [X] on the far right
         close_frame = tk.Frame(bar, bg="#0d1117", padx=12)
         close_frame.pack(side="right", fill="y")
         btn_close = tk.Label(
@@ -251,6 +321,15 @@ class GameBarOverlay:
             y = self.window.winfo_y() + (event.y - self._drag_start_y)
             self.window.geometry(f"+{x}+{y}")
 
+    def _on_rec_hover(self, is_hovered: bool):
+        if not self.btn_rec or not self.btn_rec.winfo_exists():
+            return
+        is_recording = bool(self.video_rec and self.video_rec.is_recording)
+        if is_recording:
+            self.btn_rec.config(bg="#cc2211" if is_hovered else "#ff3b30", fg="#ffffff")
+        else:
+            self.btn_rec.config(bg="#ff3b30" if is_hovered else "#21262d", fg="#ffffff" if is_hovered else "#ff5c5c")
+
     def _start_refresh_timer(self):
         self._update_views()
         if self.is_open:
@@ -259,6 +338,14 @@ class GameBarOverlay:
     def _update_views(self):
         if not self.window or not self.window.winfo_exists():
             return
+
+        # Update video recording button state
+        if self.btn_rec and self.btn_rec.winfo_exists():
+            if self.video_rec and self.video_rec.is_recording:
+                duration = self.video_rec.get_duration_str()
+                self.btn_rec.config(text=f"⏹️ STOP {duration}", bg="#ff3b30", fg="#ffffff")
+            else:
+                self.btn_rec.config(text="🔴 REC (F9)", bg="#21262d", fg="#ff5c5c")
 
         active = self.detector.active_game
         if active:

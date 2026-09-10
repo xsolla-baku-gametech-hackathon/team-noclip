@@ -1,7 +1,7 @@
 """
 Xsolla Game Recap - System Tray Integration
 Runs the official Xsolla icon in the Windows taskbar notification area.
-Provides right click access to open the GameBar, test the banner, or quit.
+Provides right click access to open the GameBar, take a visual memory, view album, or quit.
 """
 
 import threading
@@ -17,10 +17,16 @@ class SystemTrayIcon:
     def __init__(self,
                  on_open_gamebar: Callable[[], None],
                  on_test_banner: Callable[[], None],
-                 on_quit: Callable[[], None]):
+                 on_quit: Callable[[], None],
+                 on_capture: Optional[Callable[[], None]] = None,
+                 on_open_album: Optional[Callable[[], None]] = None,
+                 on_toggle_record: Optional[Callable[[], None]] = None):
         self.on_open_gamebar = on_open_gamebar
         self.on_test_banner = on_test_banner
         self.on_quit = on_quit
+        self.on_capture = on_capture
+        self.on_open_album = on_open_album
+        self.on_toggle_record = on_toggle_record
 
         self.icon = None
         self._thread: Optional[threading.Thread] = None
@@ -42,10 +48,20 @@ class SystemTrayIcon:
 
         menu_items = [
             item("Open GameBar (Ctrl+Shift+X)", lambda: self.on_open_gamebar(), default=True),
+        ]
+
+        if self.on_capture:
+            menu_items.append(item("📸 Take Screenshot (F11)", lambda: self.on_capture()))
+        if self.on_toggle_record:
+            menu_items.append(item("🔴 Toggle Video Recording (F9)", lambda: self.on_toggle_record()))
+        if self.on_open_album:
+            menu_items.append(item("🖼️ Captures Gallery", lambda: self.on_open_album()))
+
+        menu_items.extend([
             item("Test Watching Banner", lambda: self.on_test_banner()),
             Menu.SEPARATOR,
             item("Quit Xsolla Game Recap", lambda: self.on_quit())
-        ]
+        ])
 
         self.icon = pystray.Icon(
             "xsolla_game_recap",
