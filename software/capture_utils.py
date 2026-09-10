@@ -26,6 +26,7 @@ def get_cursor_rgba(hcursor: int) -> Tuple[Optional[Image.Image], int, int]:
     hdc = None
     hcdc = None
     hbmp_b = None
+    hbmp_w = None
     hbm_mask = None
     hbm_color = None
     try:
@@ -50,18 +51,22 @@ def get_cursor_rgba(hcursor: int) -> Tuple[Optional[Image.Image], int, int]:
         bmp_b = win32ui.CreateBitmapFromHandle(hbmp_b)
         img_b = Image.frombuffer('RGB', (w, h), bmp_b.GetBitmapBits(True), 'raw', 'BGRX', 0, 1)
 
-        # Draw on white background to calculate exact alpha mask
+        # Draw on white background with distinct bitmap to calculate exact alpha mask
+        hbmp_w = win32gui.CreateCompatibleBitmap(hdc, w, h)
+        win32gui.SelectObject(hcdc, hbmp_w)
         brush_w = win32gui.CreateSolidBrush(0xFFFFFF)
         win32gui.FillRect(hcdc, (0, 0, w, h), brush_w)
         win32gui.DeleteObject(brush_w)
         win32gui.DrawIconEx(hcdc, 0, 0, hcursor, w, h, 0, 0, win32con.DI_NORMAL)
 
-        bmp_w = win32ui.CreateBitmapFromHandle(hbmp_b)
+        bmp_w = win32ui.CreateBitmapFromHandle(hbmp_w)
         img_w = Image.frombuffer('RGB', (w, h), bmp_w.GetBitmapBits(True), 'raw', 'BGRX', 0, 1)
 
         win32gui.SelectObject(hcdc, hOld)
         win32gui.DeleteObject(hbmp_b)
         hbmp_b = None
+        win32gui.DeleteObject(hbmp_w)
+        hbmp_w = None
         win32gui.DeleteDC(hcdc)
         hcdc = None
         win32gui.ReleaseDC(0, hdc)
@@ -102,6 +107,8 @@ def get_cursor_rgba(hcursor: int) -> Tuple[Optional[Image.Image], int, int]:
             win32gui.DeleteObject(hbm_color)
         if hbmp_b:
             win32gui.DeleteObject(hbmp_b)
+        if hbmp_w:
+            win32gui.DeleteObject(hbmp_w)
         if hcdc:
             win32gui.DeleteDC(hcdc)
         if hdc:
