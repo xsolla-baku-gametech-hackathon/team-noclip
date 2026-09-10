@@ -102,7 +102,8 @@ class GameBarOverlay:
         # 2. Show or create the GameBar window
         if self.window and self.window.winfo_exists():
             self.window.deiconify()
-            self.backdrop.lift()
+            if self.backdrop and self.backdrop.winfo_exists():
+                self.backdrop.lift()
             self.window.lift()
             self.window.focus_force()
             self.update_recording_state()
@@ -133,7 +134,8 @@ class GameBarOverlay:
         self._start_refresh_timer()
 
         # Stack order: backdrop behind, bar in front
-        self.backdrop.lift()
+        if self.backdrop and self.backdrop.winfo_exists():
+            self.backdrop.lift()
         self.window.lift()
         self.window.focus_force()
         make_window_invisible_to_capture(self.window)
