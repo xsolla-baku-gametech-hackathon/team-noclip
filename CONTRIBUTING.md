@@ -32,6 +32,7 @@ Just keep them simple and tell us what you actually did.
 
 - `website/`: Put all the website stuff here.
 - `games/`: Drop the game projects in here.
+- `software/`: General software, scripts, or apps like the Game Recap app go here.
 - `.github/`: This just holds our templates for issues and PRs. Don't worry about it too much.
 
 Let's build something awesome!
