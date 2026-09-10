@@ -89,6 +89,15 @@ class GameDetector:
         self._running = False
         self._thread: Optional[threading.Thread] = None
         self._cached_proc: Optional[psutil.Process] = None
+        self._cached_config: Optional[Dict] = None
+        self._last_config_load: float = 0.0
+
+    def _get_config(self) -> Dict:
+        now = time.time()
+        if self._cached_config is None or (now - self._last_config_load) > 10.0:
+            self._cached_config = load_config()
+            self._last_config_load = now
+        return self._cached_config
 
     def start_monitoring(self, interval_sec: float = 1.0):
         if self._running:
@@ -153,7 +162,7 @@ class GameDetector:
             # Check if matching game path markers or shipping binary
             is_game_dir = any(marker in pexe for marker in GAME_PATH_MARKERS)
             is_shipping = "shipping" in pname
-            cfg = load_config()
+            cfg = self._get_config()
             custom_exes = [c.get("executable", "").lower() for c in cfg.get("custom_apps", [])]
 
             if is_game_dir or is_shipping or pname in custom_exes or self._is_likely_game(pname, title):
