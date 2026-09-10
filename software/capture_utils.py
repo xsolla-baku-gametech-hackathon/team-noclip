@@ -23,10 +23,17 @@ def get_cursor_rgba(hcursor: int) -> Tuple[Optional[Image.Image], int, int]:
     if hcursor in _cursor_cache:
         return _cursor_cache[hcursor]
 
+    hdc = None
+    hcdc = None
+    hbmp_b = None
+    hbm_mask = None
+    hbm_color = None
     try:
         info = win32gui.GetIconInfo(hcursor)
         x_hot = info[1]
         y_hot = info[2]
+        hbm_mask = info[3]
+        hbm_color = info[4]
         w, h = 32, 32
 
         hdc = win32gui.GetDC(0)
@@ -54,8 +61,11 @@ def get_cursor_rgba(hcursor: int) -> Tuple[Optional[Image.Image], int, int]:
 
         win32gui.SelectObject(hcdc, hOld)
         win32gui.DeleteObject(hbmp_b)
+        hbmp_b = None
         win32gui.DeleteDC(hcdc)
+        hcdc = None
         win32gui.ReleaseDC(0, hdc)
+        hdc = None
 
         # Compute alpha channel
         rgba = Image.new('RGBA', (w, h), (0, 0, 0, 0))
@@ -85,6 +95,17 @@ def get_cursor_rgba(hcursor: int) -> Tuple[Optional[Image.Image], int, int]:
         res = (fb, 0, 0)
         _cursor_cache[hcursor] = res
         return res
+    finally:
+        if hbm_mask:
+            win32gui.DeleteObject(hbm_mask)
+        if hbm_color:
+            win32gui.DeleteObject(hbm_color)
+        if hbmp_b:
+            win32gui.DeleteObject(hbmp_b)
+        if hcdc:
+            win32gui.DeleteDC(hcdc)
+        if hdc:
+            win32gui.ReleaseDC(0, hdc)
 
 
 def overlay_cursor_on_image(img: Image.Image) -> Image.Image:
