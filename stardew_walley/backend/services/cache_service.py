@@ -12,8 +12,9 @@ class StateCacheService:
     modal is opened multiple times within the same in-game day/hour.
     """
 
-    def __init__(self, default_ttl_seconds: float = 60.0):
+    def __init__(self, default_ttl_seconds: float = 60.0, max_size: int = 500):
         self.default_ttl = default_ttl_seconds
+        self.max_size = max_size
         # Mapping: fingerprint -> (RecapResponseDto, expiration_timestamp)
         self._cache: Dict[str, Tuple[RecapResponseDto, float]] = {}
 
@@ -61,11 +62,20 @@ class StateCacheService:
         ttl_seconds: Optional[float] = None,
     ) -> None:
         """
-        Stores response in cache with TTL.
+        Stores response in cache with TTL and enforces capacity limits.
         """
+        now = time.time()
+        if len(self._cache) >= self.max_size:
+            expired = [k for k, (_, exp) in self._cache.items() if now > exp]
+            for k in expired:
+                del self._cache[k]
+            if len(self._cache) >= self.max_size:
+                oldest_key = min(self._cache.keys(), key=lambda k: self._cache[k][1])
+                del self._cache[oldest_key]
+
         fp = self.compute_fingerprint(state)
         ttl = ttl_seconds if ttl_seconds is not None else self.default_ttl
-        self._cache[fp] = (response, time.time() + ttl)
+        self._cache[fp] = (response, now + ttl)
 
     def clear(self) -> None:
         """Clears all cached entries."""
