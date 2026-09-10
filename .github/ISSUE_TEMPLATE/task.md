@@ -1,18 +1,19 @@
 ---
 name: Task
-about: General task or chore
+about: Just some regular work that needs doing.
 title: '[TASK] '
 labels: chore
 assignees: ''
 
 ---
 
-**Task Description**
-A clear and concise description of the task.
+**What needs doing?**
+Just write down what this task is all about.
 
-**Acceptance Criteria**
-- [ ] Requirement 1
-- [ ] Requirement 2
+**Checklist**
+How do we know when this is actually done?
+- [ ] Done thing 1
+- [ ] Done thing 2
 
-**Additional context**
-Add any other context or links here.
+**Extra info**
+Drop any links or notes here.

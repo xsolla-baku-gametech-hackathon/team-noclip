@@ -1,17 +1,16 @@
-## Description
-Please include a summary of the change and which issue is fixed. Please also include relevant motivation and context.
+## What did you change?
+Just give us a quick rundown of what you did and why. 
 
-Closes # (issue number)
+Closes # (issue number goes here!)
 
-## Type of change
-- [ ] Bug fix (non-breaking change which fixes an issue)
-- [ ] New feature (non-breaking change which adds functionality)
-- [ ] Breaking change (fix or feature that would cause existing functionality to not work as expected)
-- [ ] This change requires a documentation update
+## What kind of change is this?
+- [ ] Bug fix (just fixing something broken)
+- [ ] New feature (adding something new)
+- [ ] Breaking change (this might break other stuff, watch out)
+- [ ] Documentation update (just updating readme/docs)
 
-## Checklist:
-- [ ] My code follows the style guidelines of this project
-- [ ] I have performed a self-review of my own code
-- [ ] I have commented my code, particularly in hard-to-understand areas
-- [ ] I have made corresponding changes to the documentation
-- [ ] My changes generate no new warnings
+## Just double checking...
+- [ ] I looked over my own code before opening this.
+- [ ] I left comments on the weird/complex parts of my code.
+- [ ] I updated the docs if I needed to.
+- [ ] The code actually runs without throwing a bunch of new warnings.
