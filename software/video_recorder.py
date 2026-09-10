@@ -14,9 +14,8 @@ from pathlib import Path
 from typing import Optional, Dict, Callable
 import cv2
 import numpy as np
-from PIL import ImageGrab
-
 from config import SCREENSHOTS_DIR, ensure_data_dir
+from capture_utils import grab_screen_with_cursor
 
 
 class VideoRecorderService:
@@ -172,7 +171,7 @@ class VideoRecorderService:
         """Grabs frames and writes to MP4Video file."""
         # Grab first frame to determine screen resolution
         try:
-            first_img = ImageGrab.grab()
+            first_img = grab_screen_with_cursor()
             w, h = first_img.size
         except Exception as err:
             print(f"[VideoRecorder] Initial frame grab failed: {err}")
@@ -199,7 +198,7 @@ class VideoRecorderService:
             now = time.time()
             if now >= next_time:
                 try:
-                    img = ImageGrab.grab()
+                    img = grab_screen_with_cursor()
                     frame = cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
                     writer.write(frame)
                     self.frame_count += 1

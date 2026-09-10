@@ -11,9 +11,8 @@ import winsound
 import threading
 from pathlib import Path
 from typing import Optional, Dict, List
-from PIL import Image, ImageGrab
-
 from config import SCREENSHOTS_DIR, ensure_data_dir
+from capture_utils import grab_screen_with_cursor
 
 
 class PolaroidService:
@@ -39,10 +38,10 @@ class PolaroidService:
         if not clean_name:
             clean_name = "game"
 
-        # 1. Capture pristine, full-resolution screen
+        # 1. Capture pristine, full-resolution screen with mouse cursor
         try:
-            # Grabs the exact full desktop at native monitor resolution
-            img = ImageGrab.grab()
+            # Grabs the exact full desktop at native monitor resolution with live cursor
+            img = grab_screen_with_cursor()
         except Exception as err:
             print(f"[Screenshot] Screen grab error: {err}")
             return None
