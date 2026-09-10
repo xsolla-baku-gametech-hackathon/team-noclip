@@ -679,10 +679,10 @@ class AlbumViewerWindow:
                         draw = ImageDraw.Draw(pil_img)
                         draw.text((130, 98), "🎬 [Video Clip]", fill="white", font=ImageFont.load_default())
                 else:
-                    pil_img = Image.open(str(media_path))
-                    target_w = 370
-                    target_h = int(pil_img.height * (target_w / pil_img.width))
-                    pil_img = pil_img.resize((target_w, target_h), Image.Resampling.LANCZOS)
+                    with Image.open(str(media_path)) as raw_img:
+                        target_w = 370
+                        target_h = int(raw_img.height * (target_w / raw_img.width))
+                        pil_img = raw_img.resize((target_w, target_h), Image.Resampling.LANCZOS)
 
                 tk_thumb = ImageTk.PhotoImage(pil_img)
                 self._thumbnails.append(tk_thumb)
