@@ -1,10 +1,10 @@
 """
-Xsolla Game Recap - Captures & Recordings Gallery
-A sleek, custom frameless gallery window displaying captured high-quality screenshots and
-video recordings, with category filters (ALL / PHOTOS / VIDEOS), 1-click preview,
-native playback, custom draggable title strip, and smooth animated kinetic scrolling
-with a custom neon capsule scrollbar.
-All captures are saved directly in Documents/XSOLLA_gamerecap/captures/.
+Xsolla Game Recap - Visual Memories Tab & Gallery
+A sleek, integrated Visual Memories tab panel embedded directly inside
+the Xsolla GameBar navbar overlay. Zero clutter, responsive 2-column
+grid, category filter tabs, custom kinetic scrollbar, and non-blocking
+folder access that opens recordings on top without closing the navbar.
+All captures are saved directly in Documents/XSOLLA_gamerecap/recordings/.
 """
 
 import os
@@ -15,7 +15,7 @@ from typing import Optional, Callable, List
 import cv2
 from PIL import Image, ImageTk, ImageDraw, ImageFont
 
-from config import SCREENSHOTS_DIR, make_window_invisible_to_capture
+from config import RECORDINGS_DIR, SCREENSHOTS_DIR, ensure_data_dir, make_window_invisible_to_capture
 from polaroid_service import PolaroidService
 
 
@@ -68,7 +68,6 @@ class AnimatedScrollBar(tk.Canvas):
             self.current_thumb_color = self.thumb_color_active
             self.update_thumb()
         else:
-            # Clicked track: jump view smoothly
             h = self.winfo_height()
             if h > 10:
                 frac = max(0.0, min(1.0, event.y / h))
@@ -104,7 +103,6 @@ class AnimatedScrollBar(tk.Canvas):
             yview = self.target_canvas.yview()
             top_frac, bot_frac = yview[0], yview[1]
 
-            # If all content fits, hide the thumb
             if top_frac <= 0.0 and bot_frac >= 1.0:
                 self.delete("all")
                 return
@@ -119,7 +117,6 @@ class AnimatedScrollBar(tk.Canvas):
 
             self.delete("all")
 
-            # Draw capsule thumb
             cx = self.bar_width // 2
             r = max(2, self.bar_width // 2 - 2)
             self.create_line(
@@ -132,27 +129,32 @@ class AnimatedScrollBar(tk.Canvas):
             pass
 
 
-class AlbumViewerWindow:
+class VisualMemoriesTab(tk.Frame):
+    """
+    The integrated Visual Memories tab component embedded directly in the GameBar navbar.
+    Displays screenshots and video recordings in a 2-column card grid, supports categories,
+    and opens the recordings folder in foreground without closing the navbar.
+    """
     def __init__(self,
-                 master: tk.Tk,
+                 parent,
                  polaroid_svc: PolaroidService,
                  on_capture_request: Optional[Callable] = None,
                  on_record_request: Optional[Callable] = None,
                  on_pause_request: Optional[Callable] = None,
-                 video_recorder: Optional[object] = None):
-        self.master = master
+                 on_close_tab: Optional[Callable] = None,
+                 video_recorder: Optional[object] = None,
+                 **kwargs):
+        super().__init__(parent, bg="#080b10", **kwargs)
         self.polaroid_svc = polaroid_svc
         self.on_capture_request = on_capture_request
         self.on_record_request = on_record_request
         self.on_pause_request = on_pause_request
+        self.on_close_tab = on_close_tab
         self.video_recorder = video_recorder
-        self.window: Optional[tk.Toplevel] = None
-        self._thumbnails = []
 
-        # Current active filter: "ALL", "PHOTOS", "VIDEOS"
+        self._thumbnails = []
         self.current_filter = "ALL"
 
-        # UI filter references
         self.btn_filter_all = None
         self.btn_filter_photos = None
         self.btn_filter_videos = None
@@ -161,171 +163,14 @@ class AlbumViewerWindow:
         self.scroll_frame = None
         self.scrollbar = None
 
-        # Drag state for custom title strip
-        self._drag_start_x = 0
-        self._drag_start_y = 0
-
-        # Smooth scrolling animation state
         self._target_scroll_y = 0.0
         self._scroll_animating = False
 
-    def open(self):
-        """Displays the stripped, custom frameless Visual Memories Album."""
-        if self.window and self.window.winfo_exists():
-            self.window.attributes("-topmost", True)
-            self.window.deiconify()
-            self.window.lift()
-            self.window.focus_force()
-            self._refresh_content()
-            return
-
-        self.window = tk.Toplevel(self.master)
-        self.window.title("Xsolla Captures & Recordings Gallery")
-        self.window.configure(bg="#080b10")
-
-        # Strip standard Windows OS window bar & borders
-        self.window.overrideredirect(True)
-        self.window.attributes("-topmost", True)
-
-        width = 900
-        height = 650
-        sw = self.window.winfo_screenwidth()
-        sh = self.window.winfo_screenheight()
-        x = (sw - width) // 2
-        y = (sh - height) // 2
-        self.window.geometry(f"{width}x{height}+{x}+{y}")
-
-        # Shortcuts
-        self.window.bind("<F5>", lambda e: self._refresh_content())
-        self.window.bind("<Escape>", lambda e: self.close())
-
         self._build_ui()
-        self._refresh_content()
-        make_window_invisible_to_capture(self.window)
-
-    def close(self):
-        """Closes or hides the Album window."""
-        if self.window and self.window.winfo_exists():
-            self.window.withdraw()
-
-    def _set_filter(self, filter_name: str):
-        """Switches the active category filter (ALL / PHOTOS / VIDEOS)."""
-        if self.current_filter == filter_name:
-            return
-        self.current_filter = filter_name
-        self._update_filter_tabs_ui()
-        self._refresh_content()
-
-    def _update_filter_tabs_ui(self):
-        """Updates the active visual highlight on filter tabs."""
-        tabs = [
-            ("ALL", self.btn_filter_all, "#70e1ff", "#080b10"),
-            ("PHOTOS", self.btn_filter_photos, "#38bdf8", "#080b10"),
-            ("VIDEOS", self.btn_filter_videos, "#ff005b", "#ffffff")
-        ]
-        for name, btn, active_bg, active_fg in tabs:
-            if not btn or not btn.winfo_exists():
-                continue
-            if self.current_filter == name:
-                btn.config(bg=active_bg, fg=active_fg)
-            else:
-                btn.config(bg="#141924", fg="#8b949e")
 
     def _build_ui(self):
-        # Outer Border Frame (1px cyber border)
-        main_border = tk.Frame(self.window, bg="#1e2633", padx=1, pady=1)
-        main_border.pack(fill="both", expand=True)
-
-        inner_container = tk.Frame(main_border, bg="#080b10")
-        inner_container.pack(fill="both", expand=True)
-
-        # 1. Custom Draggable Title Strip (Stripped Window Bar)
-        title_strip = tk.Frame(inner_container, bg="#101520", height=38, padx=14)
-        title_strip.pack(fill="x")
-        title_strip.pack_propagate(False)
-
-        title_strip.bind("<Button-1>", self._start_drag)
-        title_strip.bind("<B1-Motion>", self._on_drag)
-
-        title_left = tk.Frame(title_strip, bg="#101520")
-        title_left.pack(side="left", fill="y")
-        title_left.bind("<Button-1>", self._start_drag)
-        title_left.bind("<B1-Motion>", self._on_drag)
-
-        icon_lbl = tk.Label(
-            title_left,
-            text="⚡",
-            font=("Segoe UI", 11, "bold"),
-            fg="#70e1ff",
-            bg="#101520"
-        )
-        icon_lbl.pack(side="left", padx=(0, 6))
-        icon_lbl.bind("<Button-1>", self._start_drag)
-        icon_lbl.bind("<B1-Motion>", self._on_drag)
-
-        name_lbl = tk.Label(
-            title_left,
-            text="XSOLLA VISUAL MEMORIES",
-            font=("Segoe UI", 10, "bold"),
-            fg="#f0f6fc",
-            bg="#101520"
-        )
-        name_lbl.pack(side="left")
-        name_lbl.bind("<Button-1>", self._start_drag)
-        name_lbl.bind("<B1-Motion>", self._on_drag)
-
-        badge_lbl = tk.Label(
-            title_left,
-            text="GALLERY",
-            font=("Segoe UI", 7, "bold"),
-            fg="#8b949e",
-            bg="#1b2230",
-            padx=6,
-            pady=1
-        )
-        badge_lbl.pack(side="left", padx=8)
-        badge_lbl.bind("<Button-1>", self._start_drag)
-        badge_lbl.bind("<B1-Motion>", self._on_drag)
-
-        # Right window controls: Minimize & Close
-        controls_right = tk.Frame(title_strip, bg="#101520")
-        controls_right.pack(side="right", fill="y")
-
-        btn_min = tk.Label(
-            controls_right,
-            text="—",
-            font=("Segoe UI", 10),
-            fg="#8b949e",
-            bg="#101520",
-            cursor="hand2",
-            padx=10,
-            pady=6
-        )
-        btn_min.pack(side="left")
-        btn_min.bind("<Button-1>", lambda e: self.close())
-        btn_min.bind("<Enter>", lambda e: btn_min.config(bg="#21262d", fg="#f0f6fc"))
-        btn_min.bind("<Leave>", lambda e: btn_min.config(bg="#101520", fg="#8b949e"))
-
-        btn_close = tk.Label(
-            controls_right,
-            text="✕",
-            font=("Segoe UI", 10, "bold"),
-            fg="#8b949e",
-            bg="#101520",
-            cursor="hand2",
-            padx=10,
-            pady=6
-        )
-        btn_close.pack(side="left")
-        btn_close.bind("<Button-1>", lambda e: self.close())
-        btn_close.bind("<Enter>", lambda e: btn_close.config(bg="#da3633", fg="#ffffff"))
-        btn_close.bind("<Leave>", lambda e: btn_close.config(bg="#101520", fg="#8b949e"))
-
-        # Thin divider under title strip
-        tk.Frame(inner_container, bg="#1a2230", height=1).pack(fill="x")
-
-        # 2. Controls & Filter Bar (Record/Snap removed; Category Filters added)
-        header = tk.Frame(inner_container, bg="#0d111a", padx=20, pady=12)
+        # 1. Header & Filter Strip
+        header = tk.Frame(self, bg="#0d111a", padx=16, pady=10)
         header.pack(fill="x")
 
         # Left: Title and subtitle
@@ -334,24 +179,24 @@ class AlbumViewerWindow:
 
         tk.Label(
             title_box,
-            text="📸 CAPTURES & RECORDINGS",
-            font=("Segoe UI", 12, "bold"),
+            text="📸 VISUAL MEMORIES",
+            font=("Segoe UI", 11, "bold"),
             fg="#70e1ff",
             bg="#0d111a"
         ).pack(anchor="w")
 
         self.subtitle_lbl = tk.Label(
             title_box,
-            text="Documents/XSOLLA_gamerecap/captures/",
-            font=("Segoe UI", 9),
+            text="Documents/XSOLLA_gamerecap/recordings/",
+            font=("Segoe UI", 8),
             fg="#8b949e",
             bg="#0d111a"
         )
         self.subtitle_lbl.pack(anchor="w", pady=(2, 0))
 
-        # Center / Right: Media Category Filters (ALL / PHOTOS / VIDEOS)
+        # Center / Left: Category Filter Tabs
         filter_frame = tk.Frame(header, bg="#141924", padx=2, pady=2, highlightthickness=1, highlightbackground="#1e2633")
-        filter_frame.pack(side="left", padx=24)
+        filter_frame.pack(side="left", padx=18)
 
         self.btn_filter_all = tk.Label(
             filter_frame,
@@ -360,8 +205,8 @@ class AlbumViewerWindow:
             bg="#70e1ff",
             fg="#080b10",
             cursor="hand2",
-            padx=12,
-            pady=5
+            padx=10,
+            pady=4
         )
         self.btn_filter_all.pack(side="left")
         self.btn_filter_all.bind("<Button-1>", lambda e: self._set_filter("ALL"))
@@ -373,8 +218,8 @@ class AlbumViewerWindow:
             bg="#141924",
             fg="#8b949e",
             cursor="hand2",
-            padx=12,
-            pady=5
+            padx=10,
+            pady=4
         )
         self.btn_filter_photos.pack(side="left")
         self.btn_filter_photos.bind("<Button-1>", lambda e: self._set_filter("PHOTOS"))
@@ -386,13 +231,13 @@ class AlbumViewerWindow:
             bg="#141924",
             fg="#8b949e",
             cursor="hand2",
-            padx=12,
-            pady=5
+            padx=10,
+            pady=4
         )
         self.btn_filter_videos.pack(side="left")
         self.btn_filter_videos.bind("<Button-1>", lambda e: self._set_filter("VIDEOS"))
 
-        # Right: Utility Actions (Open Folder & Refresh)
+        # Right: Utility Actions (Open Folder, Refresh, Close Tab)
         btn_box = tk.Frame(header, bg="#0d111a")
         btn_box.pack(side="right")
 
@@ -406,11 +251,11 @@ class AlbumViewerWindow:
             activeforeground="#70e1ff",
             bd=0,
             padx=10,
-            pady=5,
+            pady=4,
             cursor="hand2",
-            command=self._open_captures_folder
+            command=self._open_recordings_folder
         )
-        btn_folder.pack(side="left", padx=4)
+        btn_folder.pack(side="left", padx=3)
 
         btn_refresh = tk.Button(
             btn_box,
@@ -422,15 +267,31 @@ class AlbumViewerWindow:
             activeforeground="#f0f6fc",
             bd=0,
             padx=8,
-            pady=5,
+            pady=4,
             cursor="hand2",
-            command=self._refresh_content
+            command=self.refresh
         )
-        btn_refresh.pack(side="left", padx=4)
+        btn_refresh.pack(side="left", padx=3)
 
-        # 3. Scrollable Gallery Body with Custom Animated Scrollbar
-        gallery_wrapper = tk.Frame(inner_container, bg="#080b10")
-        gallery_wrapper.pack(fill="both", expand=True, padx=16, pady=10)
+        if self.on_close_tab:
+            btn_close = tk.Label(
+                btn_box,
+                text="✕",
+                font=("Segoe UI", 10, "bold"),
+                fg="#8b949e",
+                bg="#0d111a",
+                cursor="hand2",
+                padx=8,
+                pady=4
+            )
+            btn_close.pack(side="left", padx=(4, 0))
+            btn_close.bind("<Button-1>", lambda e: self.on_close_tab())
+            btn_close.bind("<Enter>", lambda e: btn_close.config(fg="#ff5c5c", bg="#21262d"))
+            btn_close.bind("<Leave>", lambda e: btn_close.config(fg="#8b949e", bg="#0d111a"))
+
+        # 2. Scrollable Gallery Body
+        gallery_wrapper = tk.Frame(self, bg="#080b10")
+        gallery_wrapper.pack(fill="both", expand=True, padx=14, pady=8)
 
         self.canvas = tk.Canvas(gallery_wrapper, bg="#080b10", highlightthickness=0)
         self.scroll_frame = tk.Frame(self.canvas, bg="#080b10")
@@ -443,25 +304,33 @@ class AlbumViewerWindow:
         self.canvas.create_window((0, 0), window=self.scroll_frame, anchor="nw")
         self.canvas.pack(side="left", fill="both", expand=True)
 
-        # Custom Animated Neon Scrollbar
         self.scrollbar = AnimatedScrollBar(gallery_wrapper, target_canvas=self.canvas, width=10, bg="#080b10")
         self.scrollbar.pack(side="right", fill="y", padx=(6, 0))
 
-        # Mouse wheel smooth kinetic scroll binding (scoped to window & canvas)
+        # Mouse wheel bindings scoped to tab canvas and frame
         self.canvas.bind("<MouseWheel>", self._on_mousewheel)
-        self.window.bind("<MouseWheel>", self._on_mousewheel)
+        self.bind("<MouseWheel>", self._on_mousewheel)
 
-    def _start_drag(self, event):
-        if self.window and self.window.winfo_exists():
-            self.window.lift()
-        self._drag_start_x = event.x
-        self._drag_start_y = event.y
+    def _set_filter(self, filter_name: str):
+        if self.current_filter == filter_name:
+            return
+        self.current_filter = filter_name
+        self._update_filter_tabs_ui()
+        self.refresh()
 
-    def _on_drag(self, event):
-        if self.window and self.window.winfo_exists():
-            x = self.window.winfo_x() + (event.x - self._drag_start_x)
-            y = self.window.winfo_y() + (event.y - self._drag_start_y)
-            self.window.geometry(f"+{x}+{y}")
+    def _update_filter_tabs_ui(self):
+        tabs = [
+            ("ALL", self.btn_filter_all, "#70e1ff", "#080b10"),
+            ("PHOTOS", self.btn_filter_photos, "#38bdf8", "#080b10"),
+            ("VIDEOS", self.btn_filter_videos, "#ff005b", "#ffffff")
+        ]
+        for name, btn, active_bg, active_fg in tabs:
+            if not btn or not btn.winfo_exists():
+                continue
+            if self.current_filter == name:
+                btn.config(bg=active_bg, fg=active_fg)
+            else:
+                btn.config(bg="#141924", fg="#8b949e")
 
     def _on_scroll_frame_configure(self):
         if self.canvas and self.canvas.winfo_exists():
@@ -470,10 +339,8 @@ class AlbumViewerWindow:
                 self.scrollbar.update_thumb()
 
     def _on_mousewheel(self, event):
-        """Smooth animated kinetic scrolling with ease-out interpolation."""
-        if not self.window or not self.window.winfo_exists() or not self.canvas.winfo_exists():
+        if not self.canvas or not self.canvas.winfo_exists():
             return
-
         step = -1.0 * (event.delta / 120.0) * 0.075
         current_y = self.canvas.yview()[0]
 
@@ -490,8 +357,7 @@ class AlbumViewerWindow:
             self._animate_smooth_scroll()
 
     def _animate_smooth_scroll(self):
-        """60 FPS smooth lerp ease-out scroll animation."""
-        if not self.window or not self.window.winfo_exists() or not self.canvas.winfo_exists():
+        if not self.winfo_exists() or not self.canvas.winfo_exists():
             self._scroll_animating = False
             return
 
@@ -503,46 +369,62 @@ class AlbumViewerWindow:
             self.canvas.yview_moveto(new_y)
             if self.scrollbar:
                 self.scrollbar.update_thumb()
-            self.window.after(16, self._animate_smooth_scroll)
+            self.after(16, self._animate_smooth_scroll)
         else:
             self.canvas.yview_moveto(self._target_scroll_y)
             if self.scrollbar:
                 self.scrollbar.update_thumb()
             self._scroll_animating = False
 
-    def _open_captures_folder(self):
-        """Opens the captures directory in Windows File Explorer directly in the foreground."""
-        folder_path = str(SCREENSHOTS_DIR.resolve())
+    def _open_recordings_folder(self):
+        """
+        Opens the recordings folder in Windows File Explorer in the foreground
+        on top of everything WITHOUT closing, withdrawing, or lowering the navbar.
+        """
+        ensure_data_dir()
+        folder_path = str(RECORDINGS_DIR.resolve())
 
-        # Ensure Album window yields topmost priority so File Explorer opens in front
-        if self.window and self.window.winfo_exists():
-            self.window.attributes("-topmost", False)
-            self.window.lower()
-
-        # Direct, reliable launch of Windows File Explorer
         try:
             subprocess.Popen(["explorer.exe", folder_path])
         except Exception:
             try:
                 os.startfile(folder_path)
             except Exception as err:
-                print(f"[Album] Error opening captures folder: {err}")
+                print(f"[Album] Error opening recordings folder: {err}")
+
+        # Bring Explorer on top of everything without lowering the navbar
+        def _bring_explorer_on_top():
+            try:
+                import win32gui
+                def enum_cb(hwnd, res):
+                    if win32gui.IsWindowVisible(hwnd):
+                        cls = win32gui.GetClassName(hwnd)
+                        txt = win32gui.GetWindowText(hwnd)
+                        if cls == "CabinetWClass" and "recording" in txt.lower():
+                            res.append(hwnd)
+                    return True
+                res = []
+                win32gui.EnumWindows(enum_cb, res)
+                for h in res:
+                    win32gui.SetWindowPos(h, -1, 0, 0, 0, 0, 0x0001 | 0x0002) # HWND_TOPMOST, SWP_NOMOVE | SWP_NOSIZE
+                    win32gui.SetForegroundWindow(h)
+            except Exception:
+                pass
+
+        self.after(200, _bring_explorer_on_top)
+        self.after(500, _bring_explorer_on_top)
 
     def _open_media(self, media_path: Path):
-        """Opens a screenshot or video file and yields foreground focus to the media viewer."""
-        if self.window and self.window.winfo_exists():
-            self.window.attributes("-topmost", False)
-            self.window.lower()
+        """Opens a media file without closing or hiding the navbar."""
         try:
             os.startfile(str(media_path))
-        except Exception as e:
+        except Exception:
             try:
                 subprocess.Popen(["explorer.exe", str(media_path)])
             except Exception:
                 pass
 
-    def _extract_video_thumbnail(self, video_path: Path, target_w: int = 360) -> Optional[Image.Image]:
-        """Extracts a high-quality video thumbnail with an overlaid duration badge and play icon."""
+    def _extract_video_thumbnail(self, video_path: Path, target_w: int = 400) -> Optional[Image.Image]:
         try:
             cap = cv2.VideoCapture(str(video_path))
             if not cap.isOpened():
@@ -563,16 +445,12 @@ class AlbumViewerWindow:
             target_h = int(pil_img.height * (target_w / pil_img.width))
             pil_img = pil_img.resize((target_w, target_h), Image.Resampling.LANCZOS)
 
-            # Draw translucent play icon and duration badge
             draw = ImageDraw.Draw(pil_img, "RGBA")
             cx, cy = target_w // 2, target_h // 2
             r = 24
-            # Center frosted play circle
             draw.ellipse((cx - r, cy - r, cx + r, cy + r), fill=(0, 0, 0, 160), outline=(255, 255, 255, 220), width=2)
-            # Center play triangle
             draw.polygon([(cx - 7, cy - 12), (cx - 7, cy + 12), (cx + 13, cy)], fill=(255, 255, 255, 240))
 
-            # Duration badge in top-left
             dur_sec = int(count / fps) if fps > 0 else 0
             dur_str = f"{dur_sec // 60:02d}:{dur_sec % 60:02d}"
             badge_w = 84
@@ -585,8 +463,8 @@ class AlbumViewerWindow:
             print(f"[Album] Error extracting video thumbnail for {video_path}: {err}")
             return None
 
-    def _refresh_content(self):
-        """Filters memories based on current_filter and renders cards."""
+    def refresh(self):
+        """Refreshes and renders visual memories cards."""
         if not self.scroll_frame or not self.scroll_frame.winfo_exists():
             return
 
@@ -594,7 +472,6 @@ class AlbumViewerWindow:
             widget.destroy()
         self._thumbnails.clear()
 
-        # Reset scroll view to top on refresh/filter change
         self.canvas.yview_moveto(0.0)
         self._target_scroll_y = 0.0
 
@@ -602,7 +479,6 @@ class AlbumViewerWindow:
         photos = [p for p in all_memories if p.suffix.lower() in ('.png', '.jpg', '.jpeg')]
         videos = [p for p in all_memories if p.suffix.lower() in ('.mp4', '.mkv', '.avi', '.mov')]
 
-        # Update tab counts
         if self.btn_filter_all and self.btn_filter_all.winfo_exists():
             self.btn_filter_all.config(text=f"⚡ ALL ({len(all_memories)})")
         if self.btn_filter_photos and self.btn_filter_photos.winfo_exists():
@@ -612,7 +488,6 @@ class AlbumViewerWindow:
 
         self._update_filter_tabs_ui()
 
-        # Filter items
         if self.current_filter == "PHOTOS":
             items_to_display = photos
             empty_title = "NO SCREENSHOTS CAPTURED YET"
@@ -653,8 +528,8 @@ class AlbumViewerWindow:
             ).pack()
             return
 
-        # Render Cards in a 2-column grid
         columns = 2
+        card_w = 440
         for idx, media_path in enumerate(items_to_display):
             row = idx // columns
             col = idx % columns
@@ -673,14 +548,14 @@ class AlbumViewerWindow:
 
             try:
                 if is_video:
-                    pil_img = self._extract_video_thumbnail(media_path, target_w=370)
+                    pil_img = self._extract_video_thumbnail(media_path, target_w=card_w)
                     if not pil_img:
-                        pil_img = Image.new("RGB", (370, 208), color="#161b24")
+                        pil_img = Image.new("RGB", (card_w, 220), color="#161b24")
                         draw = ImageDraw.Draw(pil_img)
-                        draw.text((130, 98), "🎬 [Video Clip]", fill="white", font=ImageFont.load_default())
+                        draw.text((160, 100), "🎬 [Video Clip]", fill="white", font=ImageFont.load_default())
                 else:
                     with Image.open(str(media_path)) as raw_img:
-                        target_w = 370
+                        target_w = card_w
                         target_h = int(raw_img.height * (target_w / raw_img.width))
                         pil_img = raw_img.resize((target_w, target_h), Image.Resampling.LANCZOS)
 
@@ -691,13 +566,12 @@ class AlbumViewerWindow:
                 img_lbl.pack()
                 img_lbl.bind("<Button-1>", lambda e, p=media_path: self._open_media(p))
 
-                # Card footer bar
                 footer_bar = tk.Frame(card_box, bg="#0f141f", pady=5)
                 footer_bar.pack(fill="x")
 
                 display_name = media_path.stem
-                if len(display_name) > 30:
-                    display_name = display_name[:27] + "..."
+                if len(display_name) > 32:
+                    display_name = display_name[:29] + "..."
 
                 lbl_name = tk.Label(
                     footer_bar,
@@ -733,5 +607,78 @@ class AlbumViewerWindow:
             except Exception as err:
                 print(f"[Album] Error loading {media_path}: {err}")
 
-        # Update scrollbar after content rendered
-        self.window.after(50, lambda: self.scrollbar.update_thumb() if self.scrollbar else None)
+        self.after(50, lambda: self.scrollbar.update_thumb() if self.scrollbar else None)
+
+
+class AlbumViewerWindow:
+    """
+    Backwards-compatible standalone window wrapper for the VisualMemoriesTab.
+    Can either delegate directly to GameBar's integrated tab or open standalone.
+    """
+    def __init__(self,
+                 master: tk.Tk,
+                 polaroid_svc: PolaroidService,
+                 on_capture_request: Optional[Callable] = None,
+                 on_record_request: Optional[Callable] = None,
+                 on_pause_request: Optional[Callable] = None,
+                 video_recorder: Optional[object] = None,
+                 delegate_open: Optional[Callable] = None):
+        self.master = master
+        self.polaroid_svc = polaroid_svc
+        self.on_capture_request = on_capture_request
+        self.on_record_request = on_record_request
+        self.on_pause_request = on_pause_request
+        self.video_recorder = video_recorder
+        self.delegate_open = delegate_open
+        self.window: Optional[tk.Toplevel] = None
+        self.tab: Optional[VisualMemoriesTab] = None
+
+    def open(self):
+        """Opens Visual Memories. If a delegate (GameBar) is registered, opens as navbar tab."""
+        if self.delegate_open:
+            self.delegate_open()
+            return
+
+        if self.window and self.window.winfo_exists():
+            self.window.attributes("-topmost", True)
+            self.window.deiconify()
+            self.window.lift()
+            if self.tab:
+                self.tab.refresh()
+            return
+
+        self.window = tk.Toplevel(self.master)
+        self.window.title("Xsolla Visual Memories")
+        self.window.configure(bg="#080b10")
+        self.window.overrideredirect(True)
+        self.window.attributes("-topmost", True)
+
+        width, height = 980, 660
+        sw = self.window.winfo_screenwidth()
+        x = (sw - width) // 2
+        y = 20
+        self.window.geometry(f"{width}x{height}+{x}+{y}")
+
+        border = tk.Frame(self.window, bg="#1e2633", padx=1, pady=1)
+        border.pack(fill="both", expand=True)
+
+        self.tab = VisualMemoriesTab(
+            border,
+            self.polaroid_svc,
+            on_capture_request=self.on_capture_request,
+            on_record_request=self.on_record_request,
+            on_pause_request=self.on_pause_request,
+            on_close_tab=self.close,
+            video_recorder=self.video_recorder
+        )
+        self.tab.pack(fill="both", expand=True)
+        self.tab.refresh()
+        make_window_invisible_to_capture(self.window)
+
+    def close(self):
+        if self.window and self.window.winfo_exists():
+            self.window.withdraw()
+
+    def _refresh_content(self):
+        if self.tab:
+            self.tab.refresh()
