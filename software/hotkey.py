@@ -12,6 +12,7 @@ import threading
 from typing import Callable, Optional
 
 # Win32 Constants
+WM_QUIT = 0x0012
 WM_HOTKEY = 0x0312
 MOD_ALT = 0x0001
 MOD_CONTROL = 0x0002
@@ -36,6 +37,7 @@ VK_F10 = 0x79
 VK_F11 = 0x7A
 
 user32 = ctypes.windll.user32
+kernel32 = ctypes.windll.kernel32
 
 
 class GlobalHotkeyListener:
@@ -50,6 +52,7 @@ class GlobalHotkeyListener:
         self.on_pause = on_pause
         self._running = False
         self._thread: Optional[threading.Thread] = None
+        self._thread_id: int = 0
 
     def start(self):
         """Start listening for global shortcuts."""
@@ -72,11 +75,13 @@ class GlobalHotkeyListener:
             user32.UnregisterHotKey(None, HOTKEY_ID_RECORD_COMBO)
             user32.UnregisterHotKey(None, HOTKEY_ID_PAUSE_F10)
             user32.UnregisterHotKey(None, HOTKEY_ID_PAUSE_COMBO)
-            user32.PostQuitMessage(0)
+            if self._thread_id:
+                user32.PostThreadMessageW(self._thread_id, WM_QUIT, 0, 0)
         except Exception:
             pass
 
     def _message_loop(self):
+        self._thread_id = kernel32.GetCurrentThreadId()
         # 1. Overlay Hotkeys
         user32.RegisterHotKey(None, HOTKEY_ID_PRIMARY, MOD_CONTROL | MOD_SHIFT | MOD_NOREPEAT, VK_X)
         user32.RegisterHotKey(None, HOTKEY_ID_SECONDARY, MOD_ALT | MOD_NOREPEAT, VK_X)
