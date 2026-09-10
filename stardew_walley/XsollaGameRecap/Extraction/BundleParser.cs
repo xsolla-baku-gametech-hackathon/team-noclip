@@ -56,8 +56,9 @@ internal static class BundleParser
                         ingredients.Add(ingredientTokens[i]);
                     }
 
-                    // Check if this bundle is completed in CC
-                    if (int.TryParse(bundleKey, out int bundleIndex) && cc.bundles.TryGetValue(bundleIndex, out bool[]? slots))
+                    // Check if this bundle is completed in CC (supports both 1.5 "0" and 1.6 "Pantry/0" formats)
+                    string keyToParse = bundleKey.Contains('/') ? bundleKey.Split('/').Last() : bundleKey;
+                    if (int.TryParse(keyToParse, out int bundleIndex) && cc.bundles.TryGetValue(bundleIndex, out bool[]? slots))
                     {
                         bool allSlotsFilled = slots != null && slots.Length > 0 && slots.All(s => s);
                         if (allSlotsFilled)
