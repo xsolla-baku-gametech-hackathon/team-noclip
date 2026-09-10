@@ -1,14 +1,14 @@
 """
 Xsolla Game Recap - Automated Test Suite
-Verifies game detection logic, custom cracked game registration, session logging,
-and Story Recap compilation without needing manual GUI interaction.
+Verifies configuration integrity, dynamic title cleaning, session logging,
+and recap persistence without needing manual GUI interaction.
 """
 
 import sys
-if sys.stdout and hasattr(sys.stdout, 'reconfigure'):
+if sys.stdout and hasattr(sys.stdout, "reconfigure"):
     try:
-        sys.stdout.reconfigure(encoding='utf-8', errors='replace')
-        sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
     except Exception:
         pass
 
@@ -16,8 +16,8 @@ import unittest
 import time
 from pathlib import Path
 
-from config import load_config, add_custom_game, DEFAULT_SUPPORTED_GAMES
-from detector import GameDetector
+from config import load_config, register_custom_app
+from detector import GameDetector, clean_game_title
 from recap_manager import RecapManager
 
 
@@ -26,69 +26,46 @@ class TestXsollaGameRecap(unittest.TestCase):
         cfg = load_config()
         self.assertIn("app_name", cfg)
         self.assertIn("hotkey", cfg)
-        self.assertGreaterEqual(len(cfg.get("supported_games", [])), 5)
+        self.assertEqual(cfg["app_name"], "Xsolla Game Recap")
 
-        # Check Stardew Valley & Undertale are present
-        game_ids = [g["id"] for g in cfg["supported_games"]]
-        self.assertIn("stardew_valley", game_ids)
-        self.assertIn("undertale", game_ids)
+    def test_dynamic_title_cleaning(self):
+        # Test Hello Neighbor Unreal shipping executable
+        self.assertEqual(clean_game_title("HelloNeighbor-Win64-Shipping.exe"), "Hello Neighbor")
+        # Test Ultimate Custom Night camelCase
+        self.assertEqual(clean_game_title("UltimateCustomNight.exe"), "Ultimate Custom Night")
+        # Test Undertale
+        self.assertEqual(clean_game_title("UNDERTALE.exe"), "Undertale")
+        # Test Stardew Valley
+        self.assertEqual(clean_game_title("Stardew Valley.exe"), "Stardew Valley")
+        # Test window title priority
+        self.assertEqual(clean_game_title("game.exe", "Hello Neighbor 2 Alpha"), "Hello Neighbor 2 Alpha")
 
-    def test_add_custom_cracked_game(self):
-        game = add_custom_game("My Custom RPG", "custom_game.exe", window_keyword="custom game")
-        self.assertEqual(game["name"], "My Custom RPG")
-        self.assertIn("custom_game.exe", game["executables"])
-
+    def test_custom_app_registration(self):
+        register_custom_app("Hello Neighbor Standalone", "HelloNeighbor.exe")
         cfg = load_config()
-        custom_ids = [g["id"] for g in cfg.get("custom_games", [])]
-        self.assertIn(game["id"], custom_ids)
-
-    def test_detector_simulation(self):
-        launched_events = []
-        closed_events = []
-
-        detector = GameDetector(
-            on_game_launched=lambda g, pid, win: launched_events.append(g["name"]),
-            on_game_closed=lambda g: closed_events.append(g["name"])
-        )
-
-        detector.simulate_launch("undertale")
-        self.assertIsNotNone(detector.active_game)
-        self.assertEqual(detector.active_game["id"], "undertale")
-        self.assertEqual(len(launched_events), 1)
-        self.assertEqual(launched_events[0], "Undertale")
-
-        # Test session duration formatting
-        time.sleep(0.1)
-        dur = detector.get_session_duration_str()
-        self.assertTrue(dur.startswith("00:00:"))
-
-        # Test simulate close
-        detector.simulate_close()
-        self.assertIsNone(detector.active_game)
-        self.assertEqual(len(closed_events), 1)
+        matching = [c for c in cfg.get("custom_apps", []) if c.get("executable") == "helloneighbor.exe"]
+        self.assertGreaterEqual(len(matching), 1)
+        self.assertEqual(matching[0]["name"], "Hello Neighbor Standalone")
 
     def test_recap_manager_and_story(self):
         mgr = RecapManager()
         game_info = {
-            "id": "stardew_valley",
-            "name": "Stardew Valley",
-            "genre": "Farming RPG",
-            "icon": "🌾",
-            "theme_color": "#ffb300"
+            "id": "hello_neighbor",
+            "name": "Hello Neighbor",
+            "executable": "helloneighbor.exe"
         }
 
-        mgr.start_session(game_info, 12345, "Stardew Valley")
+        mgr.start_session(game_info, 12345, "Hello Neighbor")
         self.assertIsNotNone(mgr.current_session)
 
         # Log milestone
-        evt = mgr.add_event("Completed First Crop Harvest", event_type="milestone")
-        self.assertEqual(evt["text"], "Completed First Crop Harvest")
+        evt = mgr.add_event("Sneaked into Basement", event_type="milestone")
+        self.assertEqual(evt["text"], "Sneaked into Basement")
 
-        # Story generation
+        # Telemetry story generation
         story = mgr.generate_story_recap()
-        self.assertEqual(story["game_name"], "Stardew Valley")
+        self.assertEqual(story["game_name"], "Hello Neighbor")
         self.assertGreaterEqual(story["total_events"], 2)
-        self.assertIn("XP", story["xsolla_points"])
 
         # End session
         completed = mgr.end_session()

@@ -10,6 +10,7 @@ software/dist/
 
 # Test data & screenshots
 software/data/screenshots/*.png
+software/data/sessions/*.json
 
 # IDE & OS
 .vscode/

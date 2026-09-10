@@ -1,7 +1,7 @@
 """
-Xsolla Game Recap - "Is Watching" Animated Toast Banner
-Presents a high-tech, futuristic notification overlay when games launch.
-Uses Win32 non-activating window flags so it never steals focus from games!
+Xsolla Game Recap - Watching Toast Banner
+Minimalist notification overlay sliding and fading in from the right edge.
+Non-activating Win32 flags ensure games never lose window focus.
 """
 
 import time
@@ -21,9 +21,10 @@ class WatchingBanner:
         self.master = master
         self.window = None
         self._logo_photo = None
+        self._animating = False
 
     def show(self, game_name: str, shortcut: str = "Ctrl+Shift+X"):
-        """Trigger the animated 'Xsolla Game Recap is Watching' notification banner."""
+        """Triggers the right edge slide and fade in toast notification."""
         self.master.after(0, lambda: self._create_and_animate(game_name, shortcut))
 
     def _play_chime(self):
@@ -31,10 +32,9 @@ class WatchingBanner:
             cfg = load_config()
             if not cfg.get("enable_toast_sound", True):
                 return
-            # Subtle pleasant cyber chime
-            winsound.Beep(1046, 60)   # C6
-            time.sleep(0.04)
-            winsound.Beep(1318, 90)   # E6
+            winsound.Beep(1046, 50)
+            time.sleep(0.03)
+            winsound.Beep(1318, 70)
         except Exception:
             pass
 
@@ -48,19 +48,20 @@ class WatchingBanner:
         self.window = tk.Toplevel(self.master)
         self.window.overrideredirect(True)
         self.window.attributes("-topmost", True)
-        self.window.configure(bg="#141c22")
+        self.window.attributes("-alpha", 0.0)
+        self.window.configure(bg="#0c1015")
 
-        # Dimensions & Screen Placement
-        width = 470
-        height = 76
+        # Dimensions & Right-Edge Alignment
+        width = 390
+        height = 68
         screen_w = self.window.winfo_screenwidth()
-        x_pos = (screen_w - width) // 2
+        target_x = screen_w - width - 24
+        target_y = 28
+        start_x = screen_w + 10
 
-        target_y = 24
-        start_y = -height - 10
-        self.window.geometry(f"{width}x{height}+{x_pos}+{start_y}")
+        self.window.geometry(f"{width}x{height}+{start_x}+{target_y}")
 
-        # Non-activating & topmost style
+        # Non activating window style
         self.window.update_idletasks()
         try:
             hwnd = win32gui.GetParent(self.window.winfo_id())
@@ -73,76 +74,82 @@ class WatchingBanner:
             pass
 
         # Sleek Minimalist Canvas
-        canvas = tk.Canvas(self.window, width=width, height=height, bg="#141c22", highlightthickness=0)
+        canvas = tk.Canvas(self.window, width=width, height=height, bg="#0c1015", highlightthickness=0)
         canvas.pack(fill="both", expand=True)
 
         # Outer Neon Border
-        canvas.create_rectangle(1, 1, width-1, height-1, outline="#70e1ff", width=2)
-        canvas.create_rectangle(3, 3, width-3, height-3, outline="#223340", width=1)
+        canvas.create_rectangle(1, 1, width - 1, height - 1, outline="#70e1ff", width=1)
 
-        # Load & display official Xsolla logo image
+        # Official Xsolla Logo
         logo_path = ASSETS_DIR / "xsolla_logo_cropped.png"
+        text_x = 18
         if logo_path.exists():
             try:
                 pil_logo = Image.open(str(logo_path))
-                # Scale nicely to height ~26px
-                h = 26
+                h = 24
                 w = int(h * (pil_logo.width / pil_logo.height))
-                pil_resized = pil_logo.resize((w, h), Image.Resampling.LANCZOS)
-                self._logo_photo = ImageTk.PhotoImage(pil_resized)
-                canvas.create_image(18, 25, image=self._logo_photo, anchor="w")
-                text_x = 18 + w + 16
+                resized = pil_logo.resize((w, h), Image.Resampling.LANCZOS)
+                self._logo_photo = ImageTk.PhotoImage(resized)
+                canvas.create_image(16, height // 2, image=self._logo_photo, anchor="w")
+                text_x = 16 + w + 14
             except Exception:
                 self._logo_photo = None
-                text_x = 20
-        else:
-            text_x = 20
 
-        # Status badge pill (Top Right)
-        canvas.create_rectangle(width-138, 12, width-14, 28, fill="#1c2730", outline="#70e1ff", width=1)
-        canvas.create_text(width-76, 20, text=f"[{shortcut}] TO OPEN", fill="#70e1ff", font=("Segoe UI", 8, "bold"), anchor="center")
+        # Clean Typography
+        canvas.create_text(text_x, 22, text="⚡ Xsolla Game Recap is Watching",
+                           fill="#ffffff", font=("Segoe UI", 10, "bold"), anchor="w")
 
-        # Main Punchy Toast Message
-        canvas.create_text(text_x, 24, text="⚡ Xsolla Game Recap is Watching", fill="#ffffff", font=("Segoe UI", 11, "bold"), anchor="w")
+        short_game = (game_name[:22] + "...") if len(game_name) > 22 else game_name
+        canvas.create_text(text_x, 46, text=f"Hooked: {short_game}  •  [{shortcut}]",
+                           fill="#8ba4b6", font=("Segoe UI", 9), anchor="w")
 
-        # Subtitle with Clean Game Name
-        short_game = (game_name[:28] + '...') if len(game_name) > 28 else game_name
-        canvas.create_text(text_x, 50, text=f"Hooked: {short_game}  •  Capturing live events", fill="#8ba4b6", font=("Segoe UI", 9), anchor="w")
-
-        # Play subtle chime
+        # Subtle audio cue
         threading.Thread(target=self._play_chime, daemon=True).start()
 
-        # Physics Slide-In Animation
-        current_y = start_y
-        steps = 16
+        # Fade and Slide In from Right
+        in_steps = 14
+        fade_target = 0.96
 
-        def slide_in(step=0):
-            nonlocal current_y
+        def fade_in_step(step=0):
             if not self.window or not self.window.winfo_exists():
                 return
-            progress = (step + 1) / steps
-            eased = 1 - math.pow(1 - progress, 3)
-            current_y = int(start_y + (target_y - start_y) * eased)
-            self.window.geometry(f"{width}x{height}+{x_pos}+{current_y}")
+            progress = (step + 1) / in_steps
+            eased = 1.0 - math.pow(1.0 - progress, 3)
+            curr_x = int(start_x + (target_x - start_x) * eased)
+            alpha = min(fade_target, progress * fade_target)
 
-            if step + 1 < steps:
-                self.master.after(16, lambda: slide_in(step + 1))
+            try:
+                self.window.attributes("-alpha", alpha)
+                self.window.geometry(f"{width}x{height}+{curr_x}+{target_y}")
+            except Exception:
+                return
+
+            if step + 1 < in_steps:
+                self.master.after(16, lambda: fade_in_step(step + 1))
             else:
                 cfg = load_config()
-                duration = cfg.get("toast_duration_ms", 3800)
-                self.master.after(duration, lambda: slide_out(0))
+                hold_duration = cfg.get("toast_duration_ms", 3200)
+                self.master.after(hold_duration, lambda: fade_out_step(0))
 
-        def slide_out(step=0):
-            nonlocal current_y
+        # Fade and Slide Out to Right
+        out_steps = 12
+
+        def fade_out_step(step=0):
             if not self.window or not self.window.winfo_exists():
                 return
-            progress = (step + 1) / 12
+            progress = (step + 1) / out_steps
             eased = math.pow(progress, 2)
-            current_y = int(target_y - (target_y - start_y) * eased)
-            self.window.geometry(f"{width}x{height}+{x_pos}+{current_y}")
+            curr_x = int(target_x + 30 * eased)
+            alpha = max(0.0, fade_target * (1.0 - progress))
 
-            if step + 1 < 12:
-                self.master.after(16, lambda: slide_out(step + 1))
+            try:
+                self.window.attributes("-alpha", alpha)
+                self.window.geometry(f"{width}x{height}+{curr_x}+{target_y}")
+            except Exception:
+                return
+
+            if step + 1 < out_steps:
+                self.master.after(16, lambda: fade_out_step(step + 1))
             else:
                 try:
                     self.window.destroy()
@@ -150,4 +157,4 @@ class WatchingBanner:
                     pass
                 self.window = None
 
-        slide_in(0)
+        fade_in_step(0)

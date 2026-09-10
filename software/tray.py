@@ -1,7 +1,7 @@
 """
-Xsolla Game Recap - System Tray (Taskbar Notification Area) Integration
-Runs an authentic Xsolla icon in the Windows taskbar tray so the user can easily
-open the GameBar, test notifications, and cleanly right-click -> Quit at any time!
+Xsolla Game Recap - System Tray Integration
+Runs the official Xsolla icon in the Windows taskbar notification area.
+Provides right click access to open the GameBar, test the banner, or quit.
 """
 
 import threading
@@ -17,12 +17,10 @@ class SystemTrayIcon:
     def __init__(self,
                  on_open_gamebar: Callable[[], None],
                  on_test_banner: Callable[[], None],
-                 on_quit: Callable[[], None],
-                 on_simulate_game: Optional[Callable[[str], None]] = None):
+                 on_quit: Callable[[], None]):
         self.on_open_gamebar = on_open_gamebar
         self.on_test_banner = on_test_banner
         self.on_quit = on_quit
-        self.on_simulate_game = on_simulate_game
 
         self.icon = None
         self._thread: Optional[threading.Thread] = None
@@ -36,21 +34,15 @@ class SystemTrayIcon:
             img = Image.open(str(icon_path)).convert("RGBA")
             return img.resize((64, 64), Image.Resampling.LANCZOS)
         except Exception:
-            # Fallback simple cyan square with X
-            fallback = Image.new("RGBA", (64, 64), (112, 225, 255, 255))
-            return fallback
+            return Image.new("RGBA", (64, 64), (112, 225, 255, 255))
 
     def start(self):
-        """Start the system tray icon in a dedicated background thread."""
+        """Starts the system tray icon in a dedicated background thread."""
         img = self._load_icon_image()
 
         menu_items = [
             item("⚡ Open GameBar (Ctrl+Shift+X)", lambda: self.on_open_gamebar(), default=True),
-            item("🔔 Test 'Watching' Banner", lambda: self.on_test_banner()),
-            Menu.SEPARATOR,
-            item("🎮 Simulate Hello Neighbor", lambda: self._sim("hello_neighbor")),
-            item("🐻 Simulate Ultimate Custom Night", lambda: self._sim("ultimate_custom_night")),
-            item("🌾 Simulate Stardew Valley", lambda: self._sim("stardew_valley")),
+            item("🔔 Test Watching Banner", lambda: self.on_test_banner()),
             Menu.SEPARATOR,
             item("✕ Quit Xsolla Game Recap", lambda: self.on_quit())
         ]
@@ -58,20 +50,16 @@ class SystemTrayIcon:
         self.icon = pystray.Icon(
             "xsolla_game_recap",
             img,
-            "Xsolla Game Recap Overlay (Running)",
+            "Xsolla Game Recap",
             menu=Menu(*menu_items)
         )
 
         self._thread = threading.Thread(target=self.icon.run, daemon=True)
         self._thread.start()
-        print("[Tray] Official Xsolla System Tray icon initialized.")
-
-    def _sim(self, game_id: str):
-        if self.on_simulate_game:
-            self.on_simulate_game(game_id)
+        print("[Tray] System Tray icon active.")
 
     def stop(self):
-        """Stop and remove tray icon from Windows taskbar."""
+        """Removes tray icon from taskbar."""
         if self.icon:
             try:
                 self.icon.stop()
