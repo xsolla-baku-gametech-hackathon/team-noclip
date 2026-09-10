@@ -83,10 +83,8 @@ async def generate_llm_recap(state: GameStateDto) -> RecapResponseDto:
         logger.info("LLM disabled or GEMINI_API_KEY not set. Using heuristic generator.")
         return generate_heuristic_recap(state)
 
-    url = (
-        f"https://generativelanguage.googleapis.com/v1beta/models/{settings.GEMINI_MODEL}:generateContent"
-        f"?key={settings.GEMINI_API_KEY}"
-    )
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{settings.GEMINI_MODEL}:generateContent"
+    headers = {"x-goog-api-key": settings.GEMINI_API_KEY}
 
     state_json = state.model_dump_json(by_alias=True)
 
@@ -115,7 +113,7 @@ async def generate_llm_recap(state: GameStateDto) -> RecapResponseDto:
 
     try:
         async with httpx.AsyncClient(timeout=settings.HTTP_TIMEOUT_SECONDS) as client:
-            response = await client.post(url, json=payload)
+            response = await client.post(url, headers=headers, json=payload)
 
         if response.status_code != 200:
             logger.warning(
