@@ -3,7 +3,6 @@ Xsolla Game Recap - Configuration Engine
 Stores user recaps and settings locally in Documents/XSOLLA_gamerecap/.
 """
 
-import os
 import sys
 import json
 from pathlib import Path
@@ -118,8 +117,8 @@ def make_window_invisible_to_capture(window) -> bool:
         WDA_EXCLUDEFROMCAPTURE = 0x00000011  # 17 (Windows 10 2004+ / Windows 11)
         res = ctypes.windll.user32.SetWindowDisplayAffinity(target_hwnd, WDA_EXCLUDEFROMCAPTURE)
         if not res and hwnd != target_hwnd:
-            ctypes.windll.user32.SetWindowDisplayAffinity(hwnd, WDA_EXCLUDEFROMCAPTURE)
-        return True
+            res = ctypes.windll.user32.SetWindowDisplayAffinity(hwnd, WDA_EXCLUDEFROMCAPTURE)
+        return bool(res)
     except Exception as err:
         print(f"[WindowAffinity] Error excluding window from capture: {err}")
         return False
