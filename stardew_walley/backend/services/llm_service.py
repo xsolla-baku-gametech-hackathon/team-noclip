@@ -127,7 +127,12 @@ async def generate_llm_recap(state: GameStateDto) -> RecapResponseDto:
             logger.warning("No candidates returned from Gemini. Falling back to heuristic.")
             return generate_heuristic_recap(state)
 
-        text_content = candidates[0]["content"]["parts"][0]["text"]
+        parts = candidates[0].get("content", {}).get("parts", [])
+        if not parts or not isinstance(parts, list) or "text" not in parts[0]:
+            logger.warning("No valid text content returned in Gemini candidate. Falling back to heuristic.")
+            return generate_heuristic_recap(state)
+
+        text_content = parts[0]["text"]
         parsed_json = json.loads(text_content)
         return RecapResponseDto.model_validate(parsed_json)
 
