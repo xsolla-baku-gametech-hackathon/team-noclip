@@ -71,9 +71,10 @@ class XsollaGameRecapApp:
             self.root,
             self.detector,
             self.recap_mgr,
+            polaroid_svc=self.polaroid_svc,
             on_quit_app=self.shutdown,
             on_capture=self._on_capture_requested,
-            on_open_album=self.album_viewer.open,
+            on_open_album=self._open_visual_memories,
             on_toggle_record=self._on_record_toggled,
             on_toggle_pause=self._on_pause_toggled,
             video_recorder=self.video_rec
@@ -92,7 +93,7 @@ class XsollaGameRecapApp:
             on_test_banner=self._trigger_test_banner,
             on_quit=self.shutdown,
             on_capture=self._on_capture_requested,
-            on_open_album=self.album_viewer.open,
+            on_open_album=self._open_visual_memories,
             on_toggle_record=self._on_record_toggled
         )
 
@@ -129,6 +130,19 @@ class XsollaGameRecapApp:
         """Called when Ctrl+Shift+X or Alt+X is pressed anywhere in Windows."""
         self.gamebar.toggle()
 
+    def _open_visual_memories(self):
+        """Opens the GameBar navbar with the Visual Memories tab expanded."""
+        self.gamebar.open(show_album=True)
+
+    def _refresh_media_ui(self):
+        """Refreshes visual memories tab, recording states, and any open galleries."""
+        if self.gamebar.window and self.gamebar.window.winfo_exists():
+            self.gamebar.update_recording_state()
+            if self.gamebar.is_album_open and self.gamebar.visual_memories_tab:
+                self.gamebar.visual_memories_tab.refresh()
+        if self.album_viewer.window and self.album_viewer.window.winfo_exists():
+            self.album_viewer._refresh_content()
+
     def _on_capture_requested(self):
         """Called when F11 or Ctrl+Shift+S is pressed, or SNAP button clicked."""
         active = self.detector.active_game
@@ -139,10 +153,7 @@ class XsollaGameRecapApp:
         if result:
             self.recap_mgr.add_event(f"Screenshot Saved: {result['filename']}")
             self.banner.show_capture(game_name, hint="Saved in High Quality • [F11]")
-
-            # If album window is open, refresh it
-            if self.album_viewer.window and self.album_viewer.window.winfo_exists():
-                self.album_viewer._refresh_content()
+            self._refresh_media_ui()
 
     def _on_record_toggled(self):
         """Called when F9 or Ctrl+Shift+R is pressed, or REC button clicked."""
@@ -155,19 +166,13 @@ class XsollaGameRecapApp:
             if result:
                 self.recap_mgr.add_event(f"Video Clip Saved: {result['filename']} ({result['duration_str']})")
                 self.banner.show_record_stopped(result["filename"], result["duration_str"])
-                if self.gamebar.window and self.gamebar.window.winfo_exists():
-                    self.gamebar.update_recording_state()
-                if self.album_viewer.window and self.album_viewer.window.winfo_exists():
-                    self.album_viewer._refresh_content()
+                self._refresh_media_ui()
         else:
             # Start recording
             started = self.video_rec.start_recording(game_name=game_name)
             if started:
                 self.banner.show_record_started(game_name, shortcut="F9")
-                if self.gamebar.window and self.gamebar.window.winfo_exists():
-                    self.gamebar.update_recording_state()
-                if self.album_viewer.window and self.album_viewer.window.winfo_exists():
-                    self.album_viewer._refresh_content()
+                self._refresh_media_ui()
 
     def _on_pause_toggled(self):
         """Called when F10 is pressed or PAUSE button clicked."""
@@ -181,17 +186,11 @@ class XsollaGameRecapApp:
         else:
             self.banner.show_record_resumed(game_name)
 
-        if self.gamebar.window and self.gamebar.window.winfo_exists():
-            self.gamebar.update_recording_state()
-        if self.album_viewer.window and self.album_viewer.window.winfo_exists():
-            self.album_viewer._refresh_content()
+        self._refresh_media_ui()
 
     def _on_record_state_change(self, is_recording: bool, duration_str: str):
         """Callback from video recorder on start/stop/pause."""
-        if self.gamebar.window and self.gamebar.window.winfo_exists():
-            self.gamebar.update_recording_state()
-        if self.album_viewer.window and self.album_viewer.window.winfo_exists():
-            self.album_viewer._refresh_content()
+        self._refresh_media_ui()
 
     def _trigger_test_banner(self):
         active = self.detector.active_game
