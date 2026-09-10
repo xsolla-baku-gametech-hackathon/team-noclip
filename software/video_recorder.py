@@ -205,6 +205,8 @@ class VideoRecorderService:
                     try:
                         img = grab_screen_with_cursor()
                         frame = cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
+                        if frame.shape[1] != w or frame.shape[0] != h:
+                            frame = cv2.resize(frame, (w, h), interpolation=cv2.INTER_LINEAR)
                         writer.write(frame)
                         self.frame_count += 1
                     except Exception as err:
