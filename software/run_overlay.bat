@@ -1,13 +1,10 @@
 @echo off
-title Xsolla Game Recap Launcher
 cd /d "%~dp0"
 
-echo ========================================================
-echo   XSOLLA GAME RECAP OVERLAY ^& GAMEBAR
-echo ========================================================
-echo Starting background game watcher and in-game GameBar...
-echo Shortcut to open overlay during game: [Ctrl + Shift + X] (or Alt + X)
-echo.
+if exist "xsolla_launcher.exe" (
+    start "" "xsolla_launcher.exe" %*
+    exit /b 0
+)
 
-python main.py %*
-pause
+start "" pythonw main.py %*
+exit /b 0

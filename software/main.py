@@ -6,6 +6,17 @@ in-game MP4 video recording, photo album gallery, and Windows System Tray navbar
 """
 
 import sys
+import ctypes
+
+# Automatically hide any console window immediately on Windows (zero cmd visibility)
+if sys.platform == "win32":
+    try:
+        _hwnd = ctypes.windll.kernel32.GetConsoleWindow()
+        if _hwnd:
+            ctypes.windll.user32.ShowWindow(_hwnd, 0)  # 0 = SW_HIDE
+    except Exception:
+        pass
+
 if sys.stdout and hasattr(sys.stdout, "reconfigure"):
     try:
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")

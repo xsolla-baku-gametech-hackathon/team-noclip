@@ -18,15 +18,15 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         currentDir = currentDir.substr(0, lastSlash);
     }
 
-    // Command line to launch pythonw or python with main.py
-    std::string cmd = "python main.py " + std::string(lpCmdLine);
+    // Priority: pythonw for 100% silent zero-console execution
+    std::string cmd = "pythonw main.py " + std::string(lpCmdLine);
 
     STARTUPINFOA si;
     PROCESS_INFORMATION pi;
     ZeroMemory(&si, sizeof(si));
     si.cb = sizeof(si);
     si.dwFlags = STARTF_USESHOWWINDOW;
-    si.wShowWindow = SW_HIDE; // Run completely hidden / background overlay
+    si.wShowWindow = SW_HIDE; // Run completely hidden
     ZeroMemory(&pi, sizeof(pi));
 
     std::vector<char> cmdVec(cmd.begin(), cmd.end());
@@ -38,7 +38,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         NULL,
         NULL,
         FALSE,
-        CREATE_NO_WINDOW,
+        CREATE_NO_WINDOW | DETACHED_PROCESS,
         NULL,
         currentDir.c_str(),
         &si,
@@ -46,8 +46,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     );
 
     if (!success) {
-        // Fallback: try pythonw
-        std::string fallbackCmd = "pythonw main.py " + std::string(lpCmdLine);
+        // Fallback: try python with hidden window
+        std::string fallbackCmd = "python main.py " + std::string(lpCmdLine);
         std::vector<char> fbVec(fallbackCmd.begin(), fallbackCmd.end());
         fbVec.push_back('\0');
 
