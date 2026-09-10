@@ -15,6 +15,7 @@ internal static class SocialResolver
         try
         {
             var uniqueVillagers = Game1.locations
+                .Where(location => location != null && location.characters != null)
                 .SelectMany(location => location.characters)
                 .Where(npc => npc != null && npc.IsVillager && npc.Age != 2 && npc is not StardewValley.Characters.Child && !npc.IsMonster)
                 .GroupBy(npc => npc.Name)
