@@ -23,14 +23,21 @@ class AlbumViewerWindow:
                  polaroid_svc: PolaroidService,
                  on_capture_request: Optional[Callable] = None,
                  on_record_request: Optional[Callable] = None,
+                 on_pause_request: Optional[Callable] = None,
                  video_recorder: Optional[object] = None):
         self.master = master
         self.polaroid_svc = polaroid_svc
         self.on_capture_request = on_capture_request
         self.on_record_request = on_record_request
+        self.on_pause_request = on_pause_request
         self.video_recorder = video_recorder
         self.window: Optional[tk.Toplevel] = None
         self._thumbnails = []
+        self.btn_folder = None
+        self.btn_refresh = None
+        self.btn_snap = None
+        self.btn_pause_top = None
+        self.btn_record_top = None
 
     def open(self):
         """Displays the Visual Memories Album."""
@@ -92,7 +99,7 @@ class AlbumViewerWindow:
         btn_box.pack(side="right")
 
         # Open Folder button
-        btn_folder = tk.Button(
+        self.btn_folder = tk.Button(
             btn_box,
             text="📂 Open Folder",
             font=("Segoe UI", 9, "bold"),
@@ -106,10 +113,10 @@ class AlbumViewerWindow:
             cursor="hand2",
             command=self._open_captures_folder
         )
-        btn_folder.pack(side="left", padx=4)
+        self.btn_folder.pack(side="left", padx=4)
 
         # Refresh button
-        btn_refresh = tk.Button(
+        self.btn_refresh = tk.Button(
             btn_box,
             text="🔄 Refresh",
             font=("Segoe UI", 9),
@@ -123,11 +130,11 @@ class AlbumViewerWindow:
             cursor="hand2",
             command=self._refresh_content
         )
-        btn_refresh.pack(side="left", padx=4)
+        self.btn_refresh.pack(side="left", padx=4)
 
         # Snap button
         if self.on_capture_request:
-            btn_snap = tk.Button(
+            self.btn_snap = tk.Button(
                 btn_box,
                 text="📸 Snap (F11)",
                 font=("Segoe UI", 9, "bold"),
@@ -141,18 +148,33 @@ class AlbumViewerWindow:
                 cursor="hand2",
                 command=self._handle_manual_capture
             )
-            btn_snap.pack(side="left", padx=4)
+            self.btn_snap.pack(side="left", padx=4)
+        else:
+            self.btn_snap = None
 
-        # Video Record button
+        # Video Pause button (only active during recording)
+        self.btn_pause_top = tk.Button(
+            btn_box,
+            text="⏸️ Pause",
+            font=("Segoe UI", 9, "bold"),
+            bg="#21262d",
+            fg="#f0f6fc",
+            activebackground="#30363d",
+            activeforeground="#ffffff",
+            bd=0,
+            padx=10,
+            pady=5,
+            cursor="hand2",
+            command=self._handle_manual_pause
+        )
+
+        # Video Record / Stop button
         if self.on_record_request:
-            is_rec = self.video_recorder and getattr(self.video_recorder, "is_recording", False)
-            btn_rec_text = "⏹ Stop REC" if is_rec else "🔴 Record (F9)"
-            btn_rec_bg = "#da3633" if is_rec else "#ff005b"
             self.btn_record_top = tk.Button(
                 btn_box,
-                text=btn_rec_text,
+                text="🔴 Record (F9)",
                 font=("Segoe UI", 9, "bold"),
-                bg=btn_rec_bg,
+                bg="#ff005b",
                 fg="#ffffff",
                 activebackground="#d1004b",
                 activeforeground="#ffffff",
@@ -201,6 +223,11 @@ class AlbumViewerWindow:
         if self.on_record_request:
             self.on_record_request()
             self.window.after(400, self._refresh_content)
+
+    def _handle_manual_pause(self):
+        if self.on_pause_request:
+            self.on_pause_request()
+            self.window.after(100, self._refresh_content)
 
     def _open_captures_folder(self):
         try:
@@ -258,13 +285,48 @@ class AlbumViewerWindow:
             widget.destroy()
         self._thumbnails.clear()
 
-        # Update record button state if applicable
-        if self.btn_record_top and self.video_recorder:
-            is_rec = getattr(self.video_recorder, "is_recording", False)
-            self.btn_record_top.config(
-                text="⏹ Stop REC" if is_rec else "🔴 Record (F9)",
-                bg="#da3633" if is_rec else "#ff005b"
-            )
+        # Update top recording bar controls dynamically
+        is_rec = bool(self.video_recorder and getattr(self.video_recorder, "is_recording", False))
+        is_paused = bool(self.video_recorder and getattr(self.video_recorder, "is_paused", False))
+        dur_str = self.video_recorder.get_duration_str() if self.video_recorder else "00:00"
+
+        if is_rec:
+            # Hide Open Folder and Snap buttons during recording
+            if self.btn_folder and self.btn_folder.winfo_ismapped():
+                self.btn_folder.pack_forget()
+            if self.btn_snap and self.btn_snap.winfo_ismapped():
+                self.btn_snap.pack_forget()
+
+            # Show Pause button
+            if self.btn_pause_top and not self.btn_pause_top.winfo_ismapped():
+                self.btn_pause_top.pack(side="left", padx=4)
+            if self.btn_pause_top:
+                if is_paused:
+                    self.btn_pause_top.config(text=f"▶️ Resume ({dur_str})", bg="#238636")
+                else:
+                    self.btn_pause_top.config(text=f"⏸️ Pause ({dur_str})", bg="#21262d")
+
+            # Show Stop button
+            if self.btn_record_top:
+                self.btn_record_top.config(text="⏹ Stop REC", bg="#da3633")
+                if not self.btn_record_top.winfo_ismapped():
+                    self.btn_record_top.pack(side="left", padx=4)
+        else:
+            # Hide pause button
+            if self.btn_pause_top and self.btn_pause_top.winfo_ismapped():
+                self.btn_pause_top.pack_forget()
+
+            # Restore Open Folder, Refresh, and Snap buttons
+            if self.btn_folder and not self.btn_folder.winfo_ismapped():
+                self.btn_folder.pack(side="left", padx=4)
+            if self.btn_refresh and not self.btn_refresh.winfo_ismapped():
+                self.btn_refresh.pack(side="left", padx=4)
+            if self.btn_snap and not self.btn_snap.winfo_ismapped():
+                self.btn_snap.pack(side="left", padx=4)
+            if self.btn_record_top:
+                self.btn_record_top.config(text="🔴 Record (F9)", bg="#ff005b")
+                if not self.btn_record_top.winfo_ismapped():
+                    self.btn_record_top.pack(side="left", padx=4)
 
         memories = self.polaroid_svc.get_recent_memories(limit=36)
         num_screens = sum(1 for p in memories if p.suffix.lower() in ('.png', '.jpg', '.jpeg'))

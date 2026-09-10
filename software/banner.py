@@ -50,7 +50,23 @@ class WatchingBanner:
         """Triggers toast notification when video recording finishes and saves."""
         self.master.after(0, lambda: self._create_and_animate(
             title="💾 Video Saved Successfully!",
-            subtitle=f"{filename} ({duration_str})  |  Saved to Recordings",
+            subtitle=f"{filename} ({duration_str})  |  Saved to Captures",
+            title_color="#30d158"
+        ))
+
+    def show_record_paused(self, game_name: str):
+        """Triggers toast notification when video recording is paused."""
+        self.master.after(0, lambda: self._create_and_animate(
+            title="⏸️ Video Recording Paused",
+            subtitle=f"{game_name}  |  Click Resume or press [F10]",
+            title_color="#ffcc00"
+        ))
+
+    def show_record_resumed(self, game_name: str):
+        """Triggers toast notification when video recording resumes."""
+        self.master.after(0, lambda: self._create_and_animate(
+            title="▶️ Video Recording Resumed",
+            subtitle=f"{game_name}  |  Recording gameplay",
             title_color="#30d158"
         ))
 

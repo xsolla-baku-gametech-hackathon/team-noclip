@@ -24,6 +24,7 @@ class GameBarOverlay:
                  on_capture: Optional[Callable] = None,
                  on_open_album: Optional[Callable] = None,
                  on_toggle_record: Optional[Callable] = None,
+                 on_toggle_pause: Optional[Callable] = None,
                  video_recorder: Optional[object] = None):
         self.master = master
         self.detector = detector
@@ -32,8 +33,14 @@ class GameBarOverlay:
         self.on_capture = on_capture
         self.on_open_album = on_open_album
         self.on_toggle_record = on_toggle_record
+        self.on_toggle_pause = on_toggle_pause
         self.video_rec = video_recorder
         self.btn_rec = None
+        self.btn_snap = None
+        self.btn_album = None
+        self.rec_badge = None
+        self.btn_pause = None
+        self.btn_stop = None
 
         self.window: Optional[tk.Toplevel] = None
         self.backdrop: Optional[tk.Toplevel] = None
@@ -98,6 +105,7 @@ class GameBarOverlay:
             self.backdrop.lift()
             self.window.lift()
             self.window.focus_force()
+            self.update_recording_state()
             self._start_refresh_timer()
             make_window_invisible_to_capture(self.window)
             return
@@ -121,6 +129,7 @@ class GameBarOverlay:
         self.window.bind("<Escape>", lambda e: self.close())
 
         self._build_bar(width, height)
+        self.update_recording_state()
         self._start_refresh_timer()
 
         # Stack order: backdrop behind, bar in front
@@ -240,7 +249,8 @@ class GameBarOverlay:
         action_frame.bind("<Button-1>", self._start_drag)
         action_frame.bind("<B1-Motion>", self._on_drag)
 
-        btn_snap = tk.Label(
+        # Standard Idle Controls
+        self.btn_snap = tk.Label(
             action_frame,
             text="📸 SNAP (F11)",
             font=("Segoe UI", 8, "bold"),
@@ -250,13 +260,11 @@ class GameBarOverlay:
             padx=10,
             pady=4
         )
-        btn_snap.pack(side="left", pady=12, padx=3)
         if self.on_capture:
-            btn_snap.bind("<Button-1>", lambda e: self.on_capture())
-        btn_snap.bind("<Enter>", lambda e: btn_snap.config(bg="#70e1ff", fg="#0d1117"))
-        btn_snap.bind("<Leave>", lambda e: btn_snap.config(bg="#21262d", fg="#f0f6fc"))
+            self.btn_snap.bind("<Button-1>", lambda e: self.on_capture())
+        self.btn_snap.bind("<Enter>", lambda e: self.btn_snap.config(bg="#70e1ff", fg="#0d1117"))
+        self.btn_snap.bind("<Leave>", lambda e: self.btn_snap.config(bg="#21262d", fg="#f0f6fc"))
 
-        # Video Record Toggle Button
         self.btn_rec = tk.Label(
             action_frame,
             text="🔴 REC (F9)",
@@ -267,13 +275,12 @@ class GameBarOverlay:
             padx=10,
             pady=4
         )
-        self.btn_rec.pack(side="left", pady=12, padx=3)
         if self.on_toggle_record:
             self.btn_rec.bind("<Button-1>", lambda e: self.on_toggle_record())
         self.btn_rec.bind("<Enter>", lambda e: self._on_rec_hover(True))
         self.btn_rec.bind("<Leave>", lambda e: self._on_rec_hover(False))
 
-        btn_album = tk.Label(
+        self.btn_album = tk.Label(
             action_frame,
             text="🖼️ ALBUM",
             font=("Segoe UI", 8, "bold"),
@@ -283,11 +290,56 @@ class GameBarOverlay:
             padx=10,
             pady=4
         )
-        btn_album.pack(side="left", pady=12, padx=3)
         if self.on_open_album:
-            btn_album.bind("<Button-1>", lambda e: self.on_open_album())
-        btn_album.bind("<Enter>", lambda e: btn_album.config(bg="#30d158", fg="#0d1117"))
-        btn_album.bind("<Leave>", lambda e: btn_album.config(bg="#21262d", fg="#f0f6fc"))
+            self.btn_album.bind("<Button-1>", lambda e: self.on_open_album())
+        self.btn_album.bind("<Enter>", lambda e: self.btn_album.config(bg="#30d158", fg="#0d1117"))
+        self.btn_album.bind("<Leave>", lambda e: self.btn_album.config(bg="#21262d", fg="#f0f6fc"))
+
+        # Active Video Recording Controls (Only shown during video recording)
+        self.rec_badge = tk.Label(
+            action_frame,
+            text="🔴 REC 00:00",
+            font=("Segoe UI", 8, "bold"),
+            fg="#ff5c5c",
+            bg="#251217",
+            padx=8,
+            pady=4
+        )
+
+        self.btn_pause = tk.Label(
+            action_frame,
+            text="⏸️ PAUSE (F10)",
+            font=("Segoe UI", 8, "bold"),
+            fg="#f0f6fc",
+            bg="#21262d",
+            cursor="hand2",
+            padx=10,
+            pady=4
+        )
+        if self.on_toggle_pause:
+            self.btn_pause.bind("<Button-1>", lambda e: self.on_toggle_pause())
+        self.btn_pause.bind("<Enter>", lambda e: self._on_pause_hover(True))
+        self.btn_pause.bind("<Leave>", lambda e: self._on_pause_hover(False))
+
+        self.btn_stop = tk.Label(
+            action_frame,
+            text="⏹️ STOP (F9)",
+            font=("Segoe UI", 8, "bold"),
+            fg="#ffffff",
+            bg="#da3633",
+            cursor="hand2",
+            padx=10,
+            pady=4
+        )
+        if self.on_toggle_record:
+            self.btn_stop.bind("<Button-1>", lambda e: self.on_toggle_record())
+        self.btn_stop.bind("<Enter>", lambda e: self.btn_stop.config(bg="#b62324"))
+        self.btn_stop.bind("<Leave>", lambda e: self.btn_stop.config(bg="#da3633"))
+
+        # Initial layout: standard buttons shown
+        self.btn_snap.pack(side="left", pady=12, padx=3)
+        self.btn_rec.pack(side="left", pady=12, padx=3)
+        self.btn_album.pack(side="left", pady=12, padx=3)
 
         # 7. Close Button [X] on the far right
         close_frame = tk.Frame(bar, bg="#0d1117", padx=12)
@@ -324,11 +376,69 @@ class GameBarOverlay:
     def _on_rec_hover(self, is_hovered: bool):
         if not self.btn_rec or not self.btn_rec.winfo_exists():
             return
-        is_recording = bool(self.video_rec and self.video_rec.is_recording)
-        if is_recording:
-            self.btn_rec.config(bg="#cc2211" if is_hovered else "#ff3b30", fg="#ffffff")
+        self.btn_rec.config(bg="#ff3b30" if is_hovered else "#21262d", fg="#ffffff" if is_hovered else "#ff5c5c")
+
+    def _on_pause_hover(self, is_hovered: bool):
+        if not self.btn_pause or not self.btn_pause.winfo_exists():
+            return
+        is_paused = bool(self.video_rec and getattr(self.video_rec, "is_paused", False))
+        if is_paused:
+            self.btn_pause.config(bg="#2ea043" if is_hovered else "#238636")
         else:
-            self.btn_rec.config(bg="#ff3b30" if is_hovered else "#21262d", fg="#ffffff" if is_hovered else "#ff5c5c")
+            self.btn_pause.config(bg="#30363d" if is_hovered else "#21262d")
+
+    def update_recording_state(self):
+        """Swaps UI buttons: hides SNAP & ALBUM, shows PAUSE & STOP during video recording."""
+        if not self.window or not self.window.winfo_exists():
+            return
+
+        is_rec = bool(self.video_rec and self.video_rec.is_recording)
+        is_paused = bool(self.video_rec and getattr(self.video_rec, "is_paused", False))
+        duration = self.video_rec.get_duration_str() if self.video_rec else "00:00"
+
+        if is_rec:
+            # Hide screenshot and album buttons completely
+            if self.btn_snap and self.btn_snap.winfo_ismapped():
+                self.btn_snap.pack_forget()
+            if self.btn_album and self.btn_album.winfo_ismapped():
+                self.btn_album.pack_forget()
+            if self.btn_rec and self.btn_rec.winfo_ismapped():
+                self.btn_rec.pack_forget()
+
+            # Display recording badge, pause button, and stop button
+            if self.rec_badge and not self.rec_badge.winfo_ismapped():
+                self.rec_badge.pack(side="left", pady=12, padx=4)
+            if self.btn_pause and not self.btn_pause.winfo_ismapped():
+                self.btn_pause.pack(side="left", pady=12, padx=4)
+            if self.btn_stop and not self.btn_stop.winfo_ismapped():
+                self.btn_stop.pack(side="left", pady=12, padx=4)
+
+            # Update live texts
+            if is_paused:
+                self.rec_badge.config(text=f"⏸️ PAUSED {duration}", fg="#ffcc00", bg="#2b2308")
+                self.btn_pause.config(text="▶️ RESUME (F10)", bg="#238636", fg="#ffffff")
+            else:
+                self.rec_badge.config(text=f"🔴 REC {duration}", fg="#ff5c5c", bg="#251217")
+                self.btn_pause.config(text="⏸️ PAUSE (F10)", bg="#21262d", fg="#f0f6fc")
+
+            self.btn_stop.config(text="⏹️ STOP (F9)", bg="#da3633", fg="#ffffff")
+
+        else:
+            # Hide recording badge, pause button, and stop button
+            if self.rec_badge and self.rec_badge.winfo_ismapped():
+                self.rec_badge.pack_forget()
+            if self.btn_pause and self.btn_pause.winfo_ismapped():
+                self.btn_pause.pack_forget()
+            if self.btn_stop and self.btn_stop.winfo_ismapped():
+                self.btn_stop.pack_forget()
+
+            # Restore screenshot and album buttons
+            if self.btn_snap and not self.btn_snap.winfo_ismapped():
+                self.btn_snap.pack(side="left", pady=12, padx=3)
+            if self.btn_rec and not self.btn_rec.winfo_ismapped():
+                self.btn_rec.pack(side="left", pady=12, padx=3)
+            if self.btn_album and not self.btn_album.winfo_ismapped():
+                self.btn_album.pack(side="left", pady=12, padx=3)
 
     def _start_refresh_timer(self):
         self._update_views()
@@ -339,13 +449,7 @@ class GameBarOverlay:
         if not self.window or not self.window.winfo_exists():
             return
 
-        # Update video recording button state
-        if self.btn_rec and self.btn_rec.winfo_exists():
-            if self.video_rec and self.video_rec.is_recording:
-                duration = self.video_rec.get_duration_str()
-                self.btn_rec.config(text=f"⏹️ STOP {duration}", bg="#ff3b30", fg="#ffffff")
-            else:
-                self.btn_rec.config(text="🔴 REC (F9)", bg="#21262d", fg="#ff5c5c")
+        self.update_recording_state()
 
         active = self.detector.active_game
         if active:
@@ -354,7 +458,7 @@ class GameBarOverlay:
             self.game_lbl.config(text=active.get("name", "ACTIVE GAME").upper())
             self.timer_lbl.config(text=duration)
             self.stats_lbl.config(text=f"RAM {stats.get('ram_mb', 0)} MB  |  CPU {stats.get('cpu_pct', 0.0)}%")
-            self.status_lbl.config(text="RECORDING", fg="#3fb950")
+            self.status_lbl.config(text="ACTIVE", fg="#3fb950")
         else:
             self.game_lbl.config(text="NO ACTIVE GAME")
             self.timer_lbl.config(text="00:00:00")

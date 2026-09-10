@@ -47,6 +47,7 @@ class XsollaGameRecapApp:
             self.polaroid_svc,
             on_capture_request=self._on_capture_requested,
             on_record_request=self._on_record_toggled,
+            on_pause_request=self._on_pause_toggled,
             video_recorder=self.video_rec
         )
 
@@ -63,13 +64,15 @@ class XsollaGameRecapApp:
             on_capture=self._on_capture_requested,
             on_open_album=self.album_viewer.open,
             on_toggle_record=self._on_record_toggled,
+            on_toggle_pause=self._on_pause_toggled,
             video_recorder=self.video_rec
         )
 
         self.hotkey_listener = GlobalHotkeyListener(
             on_hotkey=self._on_hotkey,
             on_capture=self._on_capture_requested,
-            on_record=self._on_record_toggled
+            on_record=self._on_record_toggled,
+            on_pause=self._on_pause_toggled
         )
 
         # Windows System Tray Integration
@@ -141,6 +144,8 @@ class XsollaGameRecapApp:
             if result:
                 self.recap_mgr.add_event(f"Video Clip Saved: {result['filename']} ({result['duration_str']})")
                 self.banner.show_record_stopped(result["filename"], result["duration_str"])
+                if self.gamebar.window and self.gamebar.window.winfo_exists():
+                    self.gamebar.update_recording_state()
                 if self.album_viewer.window and self.album_viewer.window.winfo_exists():
                     self.album_viewer._refresh_content()
         else:
@@ -148,11 +153,32 @@ class XsollaGameRecapApp:
             started = self.video_rec.start_recording(game_name=game_name)
             if started:
                 self.banner.show_record_started(game_name, shortcut="F9")
+                if self.gamebar.window and self.gamebar.window.winfo_exists():
+                    self.gamebar.update_recording_state()
                 if self.album_viewer.window and self.album_viewer.window.winfo_exists():
                     self.album_viewer._refresh_content()
 
+    def _on_pause_toggled(self):
+        """Called when F10 is pressed or PAUSE button clicked."""
+        if not self.video_rec.is_recording:
+            return
+        active = self.detector.active_game
+        game_name = active.get("name") if active else "Gameplay Clip"
+        is_paused = self.video_rec.toggle_pause()
+        if is_paused:
+            self.banner.show_record_paused(game_name)
+        else:
+            self.banner.show_record_resumed(game_name)
+
+        if self.gamebar.window and self.gamebar.window.winfo_exists():
+            self.gamebar.update_recording_state()
+        if self.album_viewer.window and self.album_viewer.window.winfo_exists():
+            self.album_viewer._refresh_content()
+
     def _on_record_state_change(self, is_recording: bool, duration_str: str):
-        """Callback from video recorder on start/stop."""
+        """Callback from video recorder on start/stop/pause."""
+        if self.gamebar.window and self.gamebar.window.winfo_exists():
+            self.gamebar.update_recording_state()
         if self.album_viewer.window and self.album_viewer.window.winfo_exists():
             self.album_viewer._refresh_content()
 

@@ -24,11 +24,15 @@ HOTKEY_ID_CAPTURE_F11 = 103    # F11
 HOTKEY_ID_CAPTURE_COMBO = 104  # Ctrl + Shift + S
 HOTKEY_ID_RECORD_F9 = 105      # F9
 HOTKEY_ID_RECORD_COMBO = 106   # Ctrl + Shift + R
+HOTKEY_ID_PAUSE_F10 = 107       # F10
+HOTKEY_ID_PAUSE_COMBO = 108     # Ctrl + Shift + P
 
 VK_X = 0x58
 VK_S = 0x53
 VK_R = 0x52
+VK_P = 0x50
 VK_F9 = 0x78
+VK_F10 = 0x79
 VK_F11 = 0x7A
 
 user32 = ctypes.windll.user32
@@ -38,10 +42,12 @@ class GlobalHotkeyListener:
     def __init__(self,
                  on_hotkey: Callable[[], None],
                  on_capture: Optional[Callable[[], None]] = None,
-                 on_record: Optional[Callable[[], None]] = None):
+                 on_record: Optional[Callable[[], None]] = None,
+                 on_pause: Optional[Callable[[], None]] = None):
         self.on_hotkey = on_hotkey
         self.on_capture = on_capture
         self.on_record = on_record
+        self.on_pause = on_pause
         self._running = False
         self._thread: Optional[threading.Thread] = None
 
@@ -52,7 +58,7 @@ class GlobalHotkeyListener:
         self._running = True
         self._thread = threading.Thread(target=self._message_loop, daemon=True)
         self._thread.start()
-        print("[Hotkey] Global hotkeys active: [Ctrl+Shift+X] Overlay, [F11] Screenshot, [F9] Video Record.")
+        print("[Hotkey] Global hotkeys active: [Ctrl+Shift+X] Overlay, [F11] Screenshot, [F9] Video Record, [F10] Pause.")
 
     def stop(self):
         """Stop hotkey listening and unregister from Windows."""
@@ -64,6 +70,8 @@ class GlobalHotkeyListener:
             user32.UnregisterHotKey(None, HOTKEY_ID_CAPTURE_COMBO)
             user32.UnregisterHotKey(None, HOTKEY_ID_RECORD_F9)
             user32.UnregisterHotKey(None, HOTKEY_ID_RECORD_COMBO)
+            user32.UnregisterHotKey(None, HOTKEY_ID_PAUSE_F10)
+            user32.UnregisterHotKey(None, HOTKEY_ID_PAUSE_COMBO)
             user32.PostQuitMessage(0)
         except Exception:
             pass
@@ -80,6 +88,10 @@ class GlobalHotkeyListener:
         # 3. Video Record Hotkeys
         user32.RegisterHotKey(None, HOTKEY_ID_RECORD_F9, MOD_NOREPEAT, VK_F9)
         user32.RegisterHotKey(None, HOTKEY_ID_RECORD_COMBO, MOD_CONTROL | MOD_SHIFT | MOD_NOREPEAT, VK_R)
+
+        # 4. Video Pause Hotkeys
+        user32.RegisterHotKey(None, HOTKEY_ID_PAUSE_F10, MOD_NOREPEAT, VK_F10)
+        user32.RegisterHotKey(None, HOTKEY_ID_PAUSE_COMBO, MOD_CONTROL | MOD_SHIFT | MOD_NOREPEAT, VK_P)
 
         msg = ctypes.wintypes.MSG()
         while self._running:
@@ -100,6 +112,10 @@ class GlobalHotkeyListener:
                     print("[Hotkey] Record hotkey pressed: Toggling Video Recording...")
                     if self.on_record:
                         self.on_record()
+                elif msg.wParam in (HOTKEY_ID_PAUSE_F10, HOTKEY_ID_PAUSE_COMBO):
+                    print("[Hotkey] Pause hotkey pressed: Toggling Recording Pause...")
+                    if self.on_pause:
+                        self.on_pause()
 
             user32.TranslateMessage(ctypes.byref(msg))
             user32.DispatchMessageW(ctypes.byref(msg))
@@ -108,5 +124,9 @@ class GlobalHotkeyListener:
         user32.UnregisterHotKey(None, HOTKEY_ID_SECONDARY)
         user32.UnregisterHotKey(None, HOTKEY_ID_CAPTURE_F11)
         user32.UnregisterHotKey(None, HOTKEY_ID_CAPTURE_COMBO)
+        user32.UnregisterHotKey(None, HOTKEY_ID_RECORD_F9)
+        user32.UnregisterHotKey(None, HOTKEY_ID_RECORD_COMBO)
+        user32.UnregisterHotKey(None, HOTKEY_ID_PAUSE_F10)
+        user32.UnregisterHotKey(None, HOTKEY_ID_PAUSE_COMBO)
         user32.UnregisterHotKey(None, HOTKEY_ID_RECORD_F9)
         user32.UnregisterHotKey(None, HOTKEY_ID_RECORD_COMBO)

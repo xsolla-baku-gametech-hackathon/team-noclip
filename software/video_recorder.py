@@ -25,7 +25,10 @@ class VideoRecorderService:
         self.on_state_change = on_state_change
 
         self.is_recording = False
+        self.is_paused = False
         self.start_time = 0.0
+        self.total_paused_time = 0.0
+        self._pause_start = 0.0
         self.current_filepath: Optional[Path] = None
         self.current_filename: str = ""
         self.current_game: str = "Game"
@@ -60,7 +63,10 @@ class VideoRecorderService:
         self.current_filepath = SCREENSHOTS_DIR / self.current_filename
 
         self.is_recording = True
+        self.is_paused = False
         self.start_time = time.time()
+        self.total_paused_time = 0.0
+        self._pause_start = 0.0
         self.frame_count = 0
         self._stop_event.clear()
 
@@ -76,6 +82,43 @@ class VideoRecorderService:
             self.on_state_change(True, "00:00")
         return True
 
+    def pause_recording(self) -> bool:
+        """Pauses the active recording."""
+        if not self.is_recording or self.is_paused:
+            return False
+        self.is_paused = True
+        self._pause_start = time.time()
+        threading.Thread(target=self._play_pause_sound, daemon=True).start()
+        print(f"[VideoRecorder] Recording paused at {self.get_duration_str()}")
+        if self.on_state_change:
+            self.on_state_change(True, self.get_duration_str())
+        return True
+
+    def resume_recording(self) -> bool:
+        """Resumes a paused recording."""
+        if not self.is_recording or not self.is_paused:
+            return False
+        if self._pause_start > 0:
+            self.total_paused_time += (time.time() - self._pause_start)
+        self.is_paused = False
+        self._pause_start = 0.0
+        threading.Thread(target=self._play_resume_sound, daemon=True).start()
+        print(f"[VideoRecorder] Recording resumed at {self.get_duration_str()}")
+        if self.on_state_change:
+            self.on_state_change(True, self.get_duration_str())
+        return True
+
+    def toggle_pause(self) -> bool:
+        """Toggles pause/resume state."""
+        if not self.is_recording:
+            return False
+        if self.is_paused:
+            self.resume_recording()
+            return False
+        else:
+            self.pause_recording()
+            return True
+
     def stop_recording(self) -> Optional[Dict]:
         """Stops video recording and finalizes the MP4 file."""
         if not self.is_recording:
@@ -86,9 +129,16 @@ class VideoRecorderService:
             self._thread.join(timeout=3.0)
             self._thread = None
 
+        if self.is_paused and self._pause_start > 0:
+            elapsed = self._pause_start - self.start_time - self.total_paused_time
+        else:
+            elapsed = time.time() - self.start_time - self.total_paused_time
+        duration_str = self._format_duration(max(0.0, elapsed))
+
         self.is_recording = False
-        elapsed = time.time() - self.start_time
-        duration_str = self._format_duration(elapsed)
+        self.is_paused = False
+        self.total_paused_time = 0.0
+        self._pause_start = 0.0
 
         # Audio stop chime
         threading.Thread(target=self._play_stop_sound, daemon=True).start()
@@ -96,7 +146,7 @@ class VideoRecorderService:
         result = {
             "filename": self.current_filename,
             "path": str(self.current_filepath),
-            "duration_sec": int(elapsed),
+            "duration_sec": int(max(0.0, elapsed)),
             "duration_str": duration_str,
             "frames": self.frame_count,
             "game_name": self.current_game
@@ -109,10 +159,14 @@ class VideoRecorderService:
         return result
 
     def get_duration_str(self) -> str:
-        """Returns elapsed recording duration (MM:SS)."""
+        """Returns elapsed active recording duration (MM:SS)."""
         if not self.is_recording:
             return "00:00"
-        return self._format_duration(time.time() - self.start_time)
+        if self.is_paused and self._pause_start > 0:
+            elapsed = self._pause_start - self.start_time - self.total_paused_time
+        else:
+            elapsed = time.time() - self.start_time - self.total_paused_time
+        return self._format_duration(max(0.0, elapsed))
 
     def _record_loop(self):
         """Grabs frames and writes to MP4Video file."""
@@ -137,6 +191,11 @@ class VideoRecorderService:
 
         next_time = time.time()
         while not self._stop_event.is_set():
+            if self.is_paused:
+                time.sleep(0.04)
+                next_time = time.time()
+                continue
+
             now = time.time()
             if now >= next_time:
                 try:
@@ -165,6 +224,22 @@ class VideoRecorderService:
             winsound.Beep(1200, 70)
             time.sleep(0.04)
             winsound.Beep(1600, 100)
+        except Exception:
+            pass
+
+    def _play_pause_sound(self):
+        try:
+            winsound.Beep(1500, 60)
+            time.sleep(0.03)
+            winsound.Beep(1100, 80)
+        except Exception:
+            pass
+
+    def _play_resume_sound(self):
+        try:
+            winsound.Beep(1100, 60)
+            time.sleep(0.03)
+            winsound.Beep(1500, 80)
         except Exception:
             pass
 
