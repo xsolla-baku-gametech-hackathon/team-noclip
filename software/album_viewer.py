@@ -447,8 +447,9 @@ class AlbumViewerWindow:
         self.scrollbar = AnimatedScrollBar(gallery_wrapper, target_canvas=self.canvas, width=10, bg="#080b10")
         self.scrollbar.pack(side="right", fill="y", padx=(6, 0))
 
-        # Mouse wheel smooth kinetic scroll binding
-        self.canvas.bind_all("<MouseWheel>", self._on_mousewheel)
+        # Mouse wheel smooth kinetic scroll binding (scoped to window & canvas)
+        self.canvas.bind("<MouseWheel>", self._on_mousewheel)
+        self.window.bind("<MouseWheel>", self._on_mousewheel)
 
     def _start_drag(self, event):
         if self.window and self.window.winfo_exists():
