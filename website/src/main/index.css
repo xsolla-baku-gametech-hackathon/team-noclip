@@ -232,7 +232,6 @@
   display: flex;
   justify-content: flex-start;
   align-items: center;
-  mix-blend-mode: difference;
 }
 @media (min-width: 768px) {
   .logo-wrapper {
