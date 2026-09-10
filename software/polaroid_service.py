@@ -87,12 +87,18 @@ class PolaroidService:
         if not SCREENSHOTS_DIR.exists():
             return []
 
-        # Find screenshots and video recordings
-        files = []
-        for pattern in ("screenshot_*.png", "capture_*.png", "polaroid_*.png", "*.png", "*.jpg", "*.mp4", "*.mkv"):
-            files.extend(list(SCREENSHOTS_DIR.glob(pattern)))
+        # Find screenshots and video recordings without redundant glob scans
+        valid_extensions = {".png", ".jpg", ".jpeg", ".mp4", ".mkv", ".avi", ".mov"}
+        unique_files = [
+            p for p in SCREENSHOTS_DIR.iterdir()
+            if p.is_file() and p.suffix.lower() in valid_extensions
+        ]
 
-        # Remove duplicates if any and sort newest first
-        unique_files = list({p.resolve(): p for p in files}.values())
-        unique_files.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+        def _safe_mtime(p: Path) -> float:
+            try:
+                return p.stat().st_mtime
+            except OSError:
+                return 0.0
+
+        unique_files.sort(key=_safe_mtime, reverse=True)
         return unique_files[:limit]
