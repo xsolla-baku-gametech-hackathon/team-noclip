@@ -1,7 +1,7 @@
 """
 Xsolla Game Recap - Main Application Entrypoint
 Unifies background game detection, the "Xsolla Game Recap is Watching" animated toast,
-and the in-game GameBar overlay dashboard accessible via Ctrl+Shift+X or Alt+X.
+the in-game GameBar overlay dashboard, and the Windows System Tray navbar icon.
 """
 
 import sys
@@ -21,17 +21,18 @@ from recap_manager import RecapManager
 from banner import WatchingBanner
 from gamebar import GameBarOverlay
 from hotkey import GlobalHotkeyListener
+from tray import SystemTrayIcon
 
 
 class XsollaGameRecapApp:
-    def __init__(self, demo_mode: bool = False, open_immediately: bool = False):
+    def __init__(self, demo_mode: bool = False, open_immediately: bool = True):
         self.config = load_config()
         self.demo_mode = demo_mode
 
         # Master invisible root for Tkinter message loop
         self.root = tk.Tk()
-        self.root.withdraw()  # Hidden background service
-        self.root.title("Xsolla Game Recap Service")
+        self.root.withdraw()
+        self.root.title("Xsolla Game Recap")
 
         # Subsystems
         self.recap_mgr = RecapManager()
@@ -44,33 +45,41 @@ class XsollaGameRecapApp:
             self.root,
             self.detector,
             self.recap_mgr,
-            on_test_banner=self._trigger_test_banner
+            on_test_banner=self._trigger_test_banner,
+            on_quit_app=self.shutdown
         )
         self.hotkey_listener = GlobalHotkeyListener(on_hotkey=self._on_hotkey)
 
-        # Start listeners & watchers
+        # Windows Taskbar Notification Area / System Tray Integration
+        self.tray = SystemTrayIcon(
+            on_open_gamebar=self.gamebar.open,
+            on_test_banner=self._trigger_test_banner,
+            on_quit=self.shutdown,
+            on_simulate_game=self._simulate_game
+        )
+
+        # Start listeners, watchers & tray
         self.hotkey_listener.start()
-        self.detector.start_monitoring(interval_sec=self.config.get("scan_interval_sec", 1.5))
+        self.detector.start_monitoring(interval_sec=self.config.get("scan_interval_sec", 1.2))
+        self.tray.start()
 
         print("==========================================================")
         print("  ⚡ XSOLLA GAME RECAP OVERLAY & GAMEBAR ACTIVE")
-        print("  • Background game watcher: ON (official + cracked)")
+        print("  • Background game watcher: ON (40+ games + smart heuristics)")
+        print("  • System Tray Icon: Active in Windows taskbar navbar")
         print("  • In-Game Shortcut: [Ctrl + Shift + X] (or Alt + X)")
         print("==========================================================")
 
-        # Handle launch arguments
+        # Handle launch behavior
         if demo_mode:
             self.root.after(800, self._run_demo_sequence)
-        else:
-            # Open the GameBar immediately so the user sees the real app right away!
-            self.root.after(400, self.gamebar.open)
+        elif open_immediately:
+            # Open HUD right away so the user immediately sees the interface
+            self.root.after(300, self.gamebar.open)
 
     def _on_game_launched(self, game: dict, pid: int, window_title: str):
         print(f"[App] Game Launched: {game.get('name')} (PID: {pid})")
-        # 1. Start tracking session
         self.recap_mgr.start_session(game, pid, window_title)
-
-        # 2. Show the awesome 'Watching' toast banner!
         shortcut = self.config.get("hotkey", "Ctrl+Shift+X")
         self.banner.show(game.get("name", "Active Game"), shortcut=shortcut)
 
@@ -84,16 +93,16 @@ class XsollaGameRecapApp:
 
     def _trigger_test_banner(self):
         active = self.detector.active_game
-        game_name = active.get("name") if active else "Stardew Valley"
+        game_name = active.get("name") if active else "Hello Neighbor"
         self.banner.show(game_name, shortcut=self.config.get("hotkey", "Ctrl+Shift+X"))
 
+    def _simulate_game(self, game_id: str):
+        self.detector.simulate_launch(game_id)
+
     def _run_demo_sequence(self):
-        """Simulates a game launch and triggers both the banner and GameBar for showcase."""
         print("[App] Running Showcase Demo Mode...")
-        self.detector.simulate_launch("stardew_valley")
-        # Banner will appear automatically via callback
-        # Then open the GameBar overlay after 2 seconds
-        self.root.after(2500, self.gamebar.open)
+        self.detector.simulate_launch("hello_neighbor")
+        self.root.after(2200, self.gamebar.open)
 
     def run(self):
         try:
@@ -102,22 +111,24 @@ class XsollaGameRecapApp:
             self.shutdown()
 
     def shutdown(self):
-        print("\n[App] Shutting down Xsolla Game Recap...")
+        print("\n[App] Gracefully shutting down Xsolla Game Recap...")
         self.detector.stop_monitoring()
         self.hotkey_listener.stop()
+        self.tray.stop()
         try:
             self.root.destroy()
         except Exception:
             pass
+        sys.exit(0)
 
 
 def main():
     parser = argparse.ArgumentParser(description="Xsolla Game Recap In-Game Overlay & GameBar")
     parser.add_argument("--demo", action="store_true", help="Launch interactive demo mode simulating a game start")
-    parser.add_argument("--open-gamebar", action="store_true", help="Immediately open the GameBar dashboard on launch")
+    parser.add_argument("--hide", action="store_true", help="Start minimized directly to the system tray")
     args = parser.parse_args()
 
-    app = XsollaGameRecapApp(demo_mode=args.demo, open_immediately=args.open_gamebar)
+    app = XsollaGameRecapApp(demo_mode=args.demo, open_immediately=not args.hide)
     app.run()
 
 

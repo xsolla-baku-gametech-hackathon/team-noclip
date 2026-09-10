@@ -1,0 +1,22 @@
+{
+  "session_id": "hello_neighbor_1789051775",
+  "game_id": "hello_neighbor",
+  "game_name": "Hello Neighbor",
+  "genre": "Stealth Horror",
+  "icon": "🚪",
+  "theme_color": "#ffb703",
+  "pid": 16060,
+  "window_title": "Hello Neighbor and 1 more tab - File Explorer",
+  "started_at": "2026-09-10T18:49:35.911902",
+  "start_timestamp": 1789051775.9119108,
+  "ended_at": null,
+  "duration_seconds": 0,
+  "events": [
+    {
+      "timestamp": "18:49:35",
+      "text": "Session Hooked: Hello Neighbor is active!",
+      "type": "system"
+    }
+  ],
+  "screenshots": []
+}

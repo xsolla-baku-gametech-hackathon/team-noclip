@@ -1,0 +1,37 @@
+{
+  "session_id": "stardew_valley_1789051840",
+  "game_id": "stardew_valley",
+  "game_name": "Stardew Valley",
+  "genre": "Farming RPG",
+  "icon": "🌾",
+  "theme_color": "#ffb300",
+  "pid": 12345,
+  "window_title": "Stardew Valley",
+  "started_at": "2026-09-10T18:50:40.232291",
+  "start_timestamp": 1789051840.2323098,
+  "ended_at": "2026-09-10T18:50:40.234187",
+  "duration_seconds": 0,
+  "events": [
+    {
+      "timestamp": "18:50:40",
+      "text": "Session Hooked: Stardew Valley is active!",
+      "type": "system"
+    },
+    {
+      "timestamp": "18:50:40",
+      "text": "🌾 Cleared farm parcel for Spring Year 1",
+      "type": "milestone"
+    },
+    {
+      "timestamp": "18:50:40",
+      "text": "Completed First Crop Harvest",
+      "type": "milestone"
+    },
+    {
+      "timestamp": "18:50:40",
+      "text": "Game session concluded. Recap ready!",
+      "type": "system"
+    }
+  ],
+  "screenshots": []
+}

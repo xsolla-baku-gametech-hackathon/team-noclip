@@ -11,9 +11,62 @@
   "auto_capture_screenshots": true,
   "supported_games": [
     {
+      "id": "hello_neighbor",
+      "name": "Hello Neighbor",
+      "genre": "Stealth Horror",
+      "executables": [
+        "helloneighbor.exe",
+        "helloneighbor-win64-shipping.exe",
+        "helloneighborreborn.exe",
+        "helloneighbor2.exe"
+      ],
+      "window_keywords": [
+        "hello neighbor"
+      ],
+      "icon": "🚪",
+      "theme_color": "#ffb703"
+    },
+    {
+      "id": "ultimate_custom_night",
+      "name": "Ultimate Custom Night",
+      "genre": "Survival Horror",
+      "executables": [
+        "ultimatecustomnight.exe",
+        "ucn.exe"
+      ],
+      "window_keywords": [
+        "ultimate custom night",
+        "ucn"
+      ],
+      "icon": "🐻",
+      "theme_color": "#e63946"
+    },
+    {
+      "id": "fnaf_series",
+      "name": "Five Nights at Freddy's",
+      "genre": "Survival Horror",
+      "executables": [
+        "fnaf.exe",
+        "fnaf2.exe",
+        "fnaf3.exe",
+        "fnaf4.exe",
+        "fivenightsatfreddys.exe",
+        "securitybreach.exe",
+        "fnaf_vr.exe",
+        "sisterlocation.exe"
+      ],
+      "window_keywords": [
+        "five nights at freddy",
+        "fnaf",
+        "security breach"
+      ],
+      "icon": "🍕",
+      "theme_color": "#9d0208"
+    },
+    {
       "id": "stardew_valley",
       "name": "Stardew Valley",
-      "genre": "Farming / RPG",
+      "genre": "Farming RPG",
       "executables": [
         "stardew valley.exe",
         "stardewvalley.exe",
@@ -25,7 +78,7 @@
         "smapi"
       ],
       "icon": "🌾",
-      "theme_color": "#ffb300"
+      "theme_color": "#52b788"
     },
     {
       "id": "undertale",
@@ -43,18 +96,17 @@
       "theme_color": "#ff2a5f"
     },
     {
-      "id": "hades",
-      "name": "Hades",
-      "genre": "Roguelike Action",
+      "id": "cuphead",
+      "name": "Cuphead",
+      "genre": "Run & Gun",
       "executables": [
-        "hades.exe",
-        "hades2.exe"
+        "cuphead.exe"
       ],
       "window_keywords": [
-        "hades"
+        "cuphead"
       ],
-      "icon": "🔥",
-      "theme_color": "#e63946"
+      "icon": "☕",
+      "theme_color": "#f77f00"
     },
     {
       "id": "hollow_knight",
@@ -68,12 +120,146 @@
         "hollow knight"
       ],
       "icon": "⚔️",
-      "theme_color": "#a8dadc"
+      "theme_color": "#70e1ff"
+    },
+    {
+      "id": "celeste",
+      "name": "Celeste",
+      "genre": "Platformer",
+      "executables": [
+        "celeste.exe"
+      ],
+      "window_keywords": [
+        "celeste"
+      ],
+      "icon": "🍓",
+      "theme_color": "#ff70a6"
+    },
+    {
+      "id": "terraria",
+      "name": "Terraria",
+      "genre": "Sandbox RPG",
+      "executables": [
+        "terraria.exe",
+        "tmodloader.exe"
+      ],
+      "window_keywords": [
+        "terraria"
+      ],
+      "icon": "🌳",
+      "theme_color": "#2a9d8f"
+    },
+    {
+      "id": "binding_of_isaac",
+      "name": "The Binding of Isaac",
+      "genre": "Roguelike",
+      "executables": [
+        "isaac-ng.exe"
+      ],
+      "window_keywords": [
+        "binding of isaac"
+      ],
+      "icon": "💧",
+      "theme_color": "#a5a58d"
+    },
+    {
+      "id": "dead_cells",
+      "name": "Dead Cells",
+      "genre": "Roguelike Action",
+      "executables": [
+        "deadcells.exe",
+        "deadcells_gl.exe"
+      ],
+      "window_keywords": [
+        "dead cells"
+      ],
+      "icon": "🗡️",
+      "theme_color": "#e76f51"
+    },
+    {
+      "id": "hades",
+      "name": "Hades",
+      "genre": "Roguelike Action",
+      "executables": [
+        "hades.exe",
+        "hades2.exe"
+      ],
+      "window_keywords": [
+        "hades"
+      ],
+      "icon": "🔥",
+      "theme_color": "#d90429"
+    },
+    {
+      "id": "lethal_company",
+      "name": "Lethal Company",
+      "genre": "Co-op Survival",
+      "executables": [
+        "lethal company.exe"
+      ],
+      "window_keywords": [
+        "lethal company"
+      ],
+      "icon": "📦",
+      "theme_color": "#e09f3e"
+    },
+    {
+      "id": "phasmophobia",
+      "name": "Phasmophobia",
+      "genre": "Psychological Horror",
+      "executables": [
+        "phasmophobia.exe"
+      ],
+      "window_keywords": [
+        "phasmophobia"
+      ],
+      "icon": "👻",
+      "theme_color": "#8338ec"
+    },
+    {
+      "id": "content_warning",
+      "name": "Content Warning",
+      "genre": "Co-op Horror",
+      "executables": [
+        "content warning.exe"
+      ],
+      "window_keywords": [
+        "content warning"
+      ],
+      "icon": "📹",
+      "theme_color": "#ffee32"
+    },
+    {
+      "id": "palworld",
+      "name": "Palworld",
+      "genre": "Survival Craft",
+      "executables": [
+        "palworld.exe",
+        "palworld-win64-shipping.exe"
+      ],
+      "window_keywords": [
+        "palworld"
+      ],
+      "icon": "🐾",
+      "theme_color": "#06d6a0"
+    },
+    {
+      "id": "helldivers2",
+      "name": "Helldivers 2",
+      "genre": "Co-op Shooter",
+      "executables": [
+        "helldivers2.exe"
+      ],
+      "window_keywords": [
+        "helldivers"
+      ],
+      "icon": "🚀",
+      "theme_color": "#ffbe0b"
     },
     {
       "id": "minecraft",
       "name": "Minecraft",
-      "genre": "Sandbox / Survival",
+      "genre": "Sandbox",
       "executables": [
         "javaw.exe",
         "minecraft.exe",
@@ -85,7 +271,21 @@
         "minecraft"
       ],
       "icon": "⛏️",
-      "theme_color": "#52b788"
+      "theme_color": "#38b000"
+    },
+    {
+      "id": "roblox",
+      "name": "Roblox",
+      "genre": "Virtual Sandbox",
+      "executables": [
+        "robloxplayerbeta.exe",
+        "robloxplayer.exe"
+      ],
+      "window_keywords": [
+        "roblox"
+      ],
+      "icon": "🟥",
+      "theme_color": "#e63946"
     },
     {
       "id": "cyberpunk2077",
@@ -116,6 +316,19 @@
       "theme_color": "#2a9d8f"
     },
     {
+      "id": "rdr2",
+      "name": "Red Dead Redemption 2",
+      "genre": "Open World Western",
+      "executables": [
+        "rdr2.exe"
+      ],
+      "window_keywords": [
+        "red dead redemption"
+      ],
+      "icon": "🤠",
+      "theme_color": "#9e2a2b"
+    },
+    {
       "id": "elden_ring",
       "name": "Elden Ring",
       "genre": "Action RPG",
@@ -128,6 +341,167 @@
       ],
       "icon": "💍",
       "theme_color": "#d4af37"
+    },
+    {
+      "id": "baldur_gate_3",
+      "name": "Baldur's Gate 3",
+      "genre": "CRPG",
+      "executables": [
+        "bg3.exe",
+        "bg3_dx11.exe"
+      ],
+      "window_keywords": [
+        "baldur's gate 3"
+      ],
+      "icon": "🎲",
+      "theme_color": "#b5179e"
+    },
+    {
+      "id": "valorant",
+      "name": "VALORANT",
+      "genre": "Tactical Shooter",
+      "executables": [
+        "valorant-win64-shipping.exe",
+        "valorant.exe"
+      ],
+      "window_keywords": [
+        "valorant"
+      ],
+      "icon": "🎯",
+      "theme_color": "#ff4655"
+    },
+    {
+      "id": "cs2",
+      "name": "Counter-Strike 2",
+      "genre": "Tactical FPS",
+      "executables": [
+        "cs2.exe"
+      ],
+      "window_keywords": [
+        "counter-strike 2",
+        "counter-strike"
+      ],
+      "icon": "💣",
+      "theme_color": "#f77f00"
+    },
+    {
+      "id": "dota2",
+      "name": "Dota 2",
+      "genre": "MOBA",
+      "executables": [
+        "dota2.exe"
+      ],
+      "window_keywords": [
+        "dota 2"
+      ],
+      "icon": "🛡️",
+      "theme_color": "#d90429"
+    },
+    {
+      "id": "league_of_legends",
+      "name": "League of Legends",
+      "genre": "MOBA",
+      "executables": [
+        "leagueclient.exe",
+        "league of legends.exe"
+      ],
+      "window_keywords": [
+        "league of legends"
+      ],
+      "icon": "⚔️",
+      "theme_color": "#00b4d8"
+    },
+    {
+      "id": "fortnite",
+      "name": "Fortnite",
+      "genre": "Battle Royale",
+      "executables": [
+        "fortniteclient-win64-shipping.exe"
+      ],
+      "window_keywords": [
+        "fortnite"
+      ],
+      "icon": "🪂",
+      "theme_color": "#9d4edd"
+    },
+    {
+      "id": "apex_legends",
+      "name": "Apex Legends",
+      "genre": "Battle Royale",
+      "executables": [
+        "r5apex.exe"
+      ],
+      "window_keywords": [
+        "apex legends"
+      ],
+      "icon": "🏆",
+      "theme_color": "#e63946"
+    },
+    {
+      "id": "rocket_league",
+      "name": "Rocket League",
+      "genre": "Sports Action",
+      "executables": [
+        "rocketleague.exe"
+      ],
+      "window_keywords": [
+        "rocket league"
+      ],
+      "icon": "⚽",
+      "theme_color": "#0077b6"
+    },
+    {
+      "id": "rust",
+      "name": "Rust",
+      "genre": "Survival",
+      "executables": [
+        "rustclient.exe"
+      ],
+      "window_keywords": [
+        "rust"
+      ],
+      "icon": "🪓",
+      "theme_color": "#cd5c5c"
+    },
+    {
+      "id": "geometry_dash",
+      "name": "Geometry Dash",
+      "genre": "Rhythm Platformer",
+      "executables": [
+        "geometrydash.exe"
+      ],
+      "window_keywords": [
+        "geometry dash"
+      ],
+      "icon": "🟩",
+      "theme_color": "#00f5d4"
+    },
+    {
+      "id": "genshin_impact",
+      "name": "Genshin Impact",
+      "genre": "Action RPG",
+      "executables": [
+        "genshinimpact.exe"
+      ],
+      "window_keywords": [
+        "genshin impact"
+      ],
+      "icon": "✨",
+      "theme_color": "#48cae4"
+    },
+    {
+      "id": "honkai_star_rail",
+      "name": "Honkai: Star Rail",
+      "genre": "Turn-Based RPG",
+      "executables": [
+        "starrail.exe"
+      ],
+      "window_keywords": [
+        "honkai: star rail",
+        "star rail"
+      ],
+      "icon": "🚂",
+      "theme_color": "#b5179e"
     }
   ],
   "custom_games": [
@@ -172,6 +546,35 @@
       "icon": "🎮",
       "theme_color": "#9d4edd",
       "is_custom": true
+    },
+    {
+      "id": "custom_4",
+      "name": "My Custom RPG",
+      "genre": "Custom Game",
+      "executables": [
+        "custom_game.exe"
+      ],
+      "window_keywords": [
+        "custom game"
+      ],
+      "icon": "🎮",
+      "theme_color": "#70e1ff",
+      "is_custom": true
+    },
+    {
+      "id": "custom_5",
+      "name": "My Custom RPG",
+      "genre": "Custom Game",
+      "executables": [
+        "custom_game.exe"
+      ],
+      "window_keywords": [
+        "custom game"
+      ],
+      "icon": "🎮",
+      "theme_color": "#70e1ff",
+      "is_custom": true
     }
-  ]
+  ],
+  "smart_heuristic_detection": true
 }
