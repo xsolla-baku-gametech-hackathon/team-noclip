@@ -21,6 +21,15 @@ from backend.models import (
 )
 
 
+def _safe_int(val: Optional[str], default: int = 0) -> int:
+    if val is None:
+        return default
+    try:
+        return int(float(str(val).strip()))
+    except (ValueError, TypeError):
+        return default
+
+
 def parse_save_xml(xml_content_or_path: Union[str, bytes, Path]) -> GameStateDto:
     """
     Parses a Stardew Valley save XML file into a structured GameStateDto.
@@ -38,15 +47,15 @@ def parse_save_xml(xml_content_or_path: Union[str, bytes, Path]) -> GameStateDto
     player_elem = root.find("player")
     player_name = player_elem.findtext("name", "Farmer") if player_elem is not None else "Farmer"
     farm_name = player_elem.findtext("farmName", "Standard Farm") if player_elem is not None else "Standard Farm"
-    gold = int(player_elem.findtext("money", "0")) if player_elem is not None else 0
+    gold = _safe_int(player_elem.findtext("money") if player_elem is not None else None, 0)
 
     player = PlayerDto(name=player_name, farmName=farm_name, gold=gold)
 
     # 2. Date & Time
     season = root.findtext("currentSeason", "Spring").capitalize()
-    day = int(root.findtext("dayOfMonth", "1"))
-    year = int(root.findtext("year", "1"))
-    time_of_day = int(root.findtext("timeOfDay", "600"))
+    day = _safe_int(root.findtext("dayOfMonth"), 1)
+    year = _safe_int(root.findtext("year"), 1)
+    time_of_day = _safe_int(root.findtext("timeOfDay"), 600)
 
     date = DateTimeDto(season=season, day=day, year=year, timeOfDay=time_of_day)
 
@@ -80,7 +89,7 @@ def parse_save_xml(xml_content_or_path: Union[str, bytes, Path]) -> GameStateDto
                         crop_count += 1
                         is_dead = crop_elem.findtext("dead", "false").lower() == "true"
                         is_watered = feature.findtext("state", "0") == "1" or feature.findtext("isWatered", "false").lower() == "true"
-                        current_phase = int(crop_elem.findtext("currentPhase", "0"))
+                        current_phase = _safe_int(crop_elem.findtext("currentPhase"), 0)
                         
                         # Phase days list
                         phase_days_elem = crop_elem.find("phaseDays")
@@ -103,8 +112,8 @@ def parse_save_xml(xml_content_or_path: Union[str, bytes, Path]) -> GameStateDto
 
                         # Tile position
                         pos_elem = item.find("key/Vector2")
-                        x = int(float(pos_elem.findtext("X", "0"))) if pos_elem is not None else 0
-                        y = int(float(pos_elem.findtext("Y", "0"))) if pos_elem is not None else 0
+                        x = _safe_int(pos_elem.findtext("X") if pos_elem is not None else None, 0)
+                        y = _safe_int(pos_elem.findtext("Y") if pos_elem is not None else None, 0)
 
                         crops.append(
                             CropDto(
@@ -129,11 +138,7 @@ def parse_save_xml(xml_content_or_path: Union[str, bytes, Path]) -> GameStateDto
         for q_elem in quest_log.findall("Quest"):
             title = q_elem.findtext("_questTitle") or q_elem.findtext("questTitle") or "Village Request"
             desc = q_elem.findtext("questDescription") or ""
-            days_left_text = q_elem.findtext("daysLeft", "-1")
-            try:
-                days_left = int(days_left_text)
-            except ValueError:
-                days_left = -1
+            days_left = _safe_int(q_elem.findtext("daysLeft"), -1)
             
             quests.append(
                 QuestDto(
@@ -153,7 +158,7 @@ def parse_save_xml(xml_content_or_path: Union[str, bytes, Path]) -> GameStateDto
                 name = item.findtext("key/string", "")
                 points_elem = item.find("value/Friendship/Points")
                 if name and points_elem is not None:
-                    points = int(points_elem.text or "0")
+                    points = _safe_int(points_elem.text, 0)
                     hearts = points // 250
                     if hearts <= 2:
                         low_heart_villagers.append(
