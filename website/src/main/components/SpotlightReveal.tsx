@@ -8,27 +8,15 @@ interface SpotlightRevealProps {
 const SPOTLIGHT_RADIUS = 260;
 
 const SpotlightReveal = ({ baseImage, revealImage }: SpotlightRevealProps) => {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
   const revealRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const canvas = canvasRef.current;
     const reveal = revealRef.current;
-    if (!canvas || !reveal) return;
-
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
+    if (!reveal) return;
 
     const mouse = { x: -999, y: -999 };
     const smooth = { x: -999, y: -999 };
     let frameId: number;
-
-    const resizeCanvas = () => {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
-    };
-    resizeCanvas();
-    window.addEventListener('resize', resizeCanvas);
 
     const handleMouseMove = (e: MouseEvent) => {
       mouse.x = e.clientX;
@@ -40,26 +28,9 @@ const SpotlightReveal = ({ baseImage, revealImage }: SpotlightRevealProps) => {
       smooth.x += (mouse.x - smooth.x) * 0.1;
       smooth.y += (mouse.y - smooth.y) * 0.1;
 
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-      const grad = ctx.createRadialGradient(smooth.x, smooth.y, 0, smooth.x, smooth.y, SPOTLIGHT_RADIUS);
-      grad.addColorStop(0, 'rgba(255,255,255,1)');
-      grad.addColorStop(0.4, 'rgba(255,255,255,1)');
-      grad.addColorStop(0.6, 'rgba(255,255,255,0.75)');
-      grad.addColorStop(0.75, 'rgba(255,255,255,0.4)');
-      grad.addColorStop(0.88, 'rgba(255,255,255,0.12)');
-      grad.addColorStop(1, 'rgba(255,255,255,0)');
-
-      ctx.beginPath();
-      ctx.arc(smooth.x, smooth.y, SPOTLIGHT_RADIUS, 0, Math.PI * 2);
-      ctx.fillStyle = grad;
-      ctx.fill();
-
-      const dataUrl = canvas.toDataURL();
-      reveal.style.webkitMaskImage = `url(${dataUrl})`;
-      reveal.style.maskImage = `url(${dataUrl})`;
-      reveal.style.webkitMaskSize = '100% 100%';
-      reveal.style.maskSize = '100% 100%';
+      const maskGradient = `radial-gradient(circle ${SPOTLIGHT_RADIUS}px at ${smooth.x.toFixed(1)}px ${smooth.y.toFixed(1)}px, black 0%, black 40%, rgba(0,0,0,0.75) 60%, rgba(0,0,0,0.4) 75%, rgba(0,0,0,0.12) 88%, transparent 100%)`;
+      reveal.style.webkitMaskImage = maskGradient;
+      reveal.style.maskImage = maskGradient;
 
       frameId = requestAnimationFrame(loop);
     };
@@ -67,7 +38,6 @@ const SpotlightReveal = ({ baseImage, revealImage }: SpotlightRevealProps) => {
 
     return () => {
       cancelAnimationFrame(frameId);
-      window.removeEventListener('resize', resizeCanvas);
       window.removeEventListener('mousemove', handleMouseMove);
     };
   }, []);
@@ -78,7 +48,6 @@ const SpotlightReveal = ({ baseImage, revealImage }: SpotlightRevealProps) => {
         className="hero-base-img hero-image-animate absolute inset-0 z-[5]"
         style={{ backgroundImage: `url('${baseImage}')` }}
       />
-      <canvas ref={canvasRef} className="hidden absolute inset-0 pointer-events-none" />
       <div
         ref={revealRef}
         className="hero-reveal-img absolute inset-0 pointer-events-none z-[7]"
