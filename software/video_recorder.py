@@ -188,30 +188,31 @@ class VideoRecorderService:
             self.is_recording = False
             return
 
-        next_time = time.time()
-        while not self._stop_event.is_set():
-            if self.is_paused:
-                time.sleep(0.04)
-                next_time = time.time()
-                continue
+        try:
+            next_time = time.time()
+            while not self._stop_event.is_set():
+                if self.is_paused:
+                    time.sleep(0.04)
+                    next_time = time.time()
+                    continue
 
-            now = time.time()
-            if now >= next_time:
-                try:
-                    img = grab_screen_with_cursor()
-                    frame = cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
-                    writer.write(frame)
-                    self.frame_count += 1
-                except Exception as err:
-                    print(f"[VideoRecorder] Frame write error: {err}")
+                now = time.time()
+                if now >= next_time:
+                    try:
+                        img = grab_screen_with_cursor()
+                        frame = cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
+                        writer.write(frame)
+                        self.frame_count += 1
+                    except Exception as err:
+                        print(f"[VideoRecorder] Frame write error: {err}")
 
-                next_time += frame_interval
-            else:
-                sleep_time = next_time - now
-                if sleep_time > 0.002:
-                    time.sleep(min(sleep_time, 0.02))
-
-        writer.release()
+                    next_time += frame_interval
+                else:
+                    sleep_time = next_time - now
+                    if sleep_time > 0.002:
+                        time.sleep(min(sleep_time, 0.02))
+        finally:
+            writer.release()
 
     def _format_duration(self, seconds: float) -> str:
         mins = int(seconds) // 60
