@@ -142,6 +142,8 @@ class VisualMemoriesTab(tk.Frame):
                  on_record_request: Optional[Callable] = None,
                  on_pause_request: Optional[Callable] = None,
                  on_close_tab: Optional[Callable] = None,
+                 on_open_folder: Optional[Callable] = None,
+                 on_media_opened: Optional[Callable] = None,
                  video_recorder: Optional[object] = None,
                  **kwargs):
         super().__init__(parent, bg="#080b10", **kwargs)
@@ -150,6 +152,8 @@ class VisualMemoriesTab(tk.Frame):
         self.on_record_request = on_record_request
         self.on_pause_request = on_pause_request
         self.on_close_tab = on_close_tab
+        self.on_open_folder = on_open_folder
+        self.on_media_opened = on_media_opened
         self.video_recorder = video_recorder
 
         self._thumbnails = []
@@ -253,7 +257,7 @@ class VisualMemoriesTab(tk.Frame):
             padx=10,
             pady=4,
             cursor="hand2",
-            command=self._open_recordings_folder
+            command=self._on_folder_btn_click
         )
         btn_folder.pack(side="left", padx=3)
 
@@ -376,13 +380,27 @@ class VisualMemoriesTab(tk.Frame):
                 self.scrollbar.update_thumb()
             self._scroll_animating = False
 
+    def _on_folder_btn_click(self):
+        """Called when user clicks 'Open Folder'. Delegates to custom handler or opens directly."""
+        if self.on_open_folder:
+            try:
+                self.on_open_folder()
+                return
+            except Exception:
+                pass
+        self._open_recordings_folder()
+
     def _open_recordings_folder(self):
         """
-        Opens the recordings folder in Windows File Explorer in the foreground
-        on top of everything WITHOUT closing, withdrawing, or lowering the navbar.
+        Opens the recordings folder in Windows File Explorer and elevates it to topmost
+        in the foreground WITHOUT closing, withdrawing, or lowering the navbar.
         """
         ensure_data_dir()
         folder_path = str(RECORDINGS_DIR.resolve())
+
+        import ctypes
+        user32 = ctypes.windll.user32
+        user32.AllowSetForegroundWindow(-1)
 
         try:
             subprocess.Popen(["explorer.exe", folder_path])
@@ -395,27 +413,60 @@ class VisualMemoriesTab(tk.Frame):
         # Bring Explorer on top of everything without lowering the navbar
         def _bring_explorer_on_top():
             try:
-                import win32gui
-                def enum_cb(hwnd, res):
-                    if win32gui.IsWindowVisible(hwnd):
-                        cls = win32gui.GetClassName(hwnd)
-                        txt = win32gui.GetWindowText(hwnd)
-                        if cls == "CabinetWClass" and "recording" in txt.lower():
-                            res.append(hwnd)
-                    return True
-                res = []
-                win32gui.EnumWindows(enum_cb, res)
-                for h in res:
-                    win32gui.SetWindowPos(h, -1, 0, 0, 0, 0, 0x0001 | 0x0002) # HWND_TOPMOST, SWP_NOMOVE | SWP_NOSIZE
-                    win32gui.SetForegroundWindow(h)
-            except Exception:
-                pass
+                user32.AllowSetForegroundWindow(-1)
+                WNDENUMPROC = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_int, ctypes.c_void_p)
+                target_hwnds = []
 
-        self.after(200, _bring_explorer_on_top)
-        self.after(500, _bring_explorer_on_top)
+                def enum_cb(hwnd, lparam):
+                    if not user32.IsWindowVisible(hwnd):
+                        return True
+                    cbuf = ctypes.create_unicode_buffer(256)
+                    user32.GetClassNameW(hwnd, cbuf, 256)
+                    if cbuf.value in ("CabinetWClass", "ExploreWClass"):
+                        tbuf = ctypes.create_unicode_buffer(256)
+                        user32.GetWindowTextW(hwnd, tbuf, 256)
+                        txt = tbuf.value.lower()
+                        if "recording" in txt or "xsolla" in txt:
+                            target_hwnds.append(hwnd)
+                    return True
+
+                cb = WNDENUMPROC(enum_cb)
+                user32.EnumWindows(cb, 0)
+
+                fore_hwnd = user32.GetForegroundWindow()
+                fore_tid = user32.GetWindowThreadProcessId(fore_hwnd, None)
+                app_tid = ctypes.windll.kernel32.GetCurrentThreadId()
+
+                for hwnd in target_hwnds:
+                    if user32.IsIconic(hwnd):
+                        user32.ShowWindow(hwnd, 9)  # SW_RESTORE
+                    else:
+                        user32.ShowWindow(hwnd, 5)  # SW_SHOW
+
+                    if fore_tid and fore_tid != app_tid:
+                        user32.AttachThreadInput(app_tid, fore_tid, True)
+                        user32.BringWindowToTop(hwnd)
+                        user32.SetForegroundWindow(hwnd)
+                        user32.AttachThreadInput(app_tid, fore_tid, False)
+                    else:
+                        user32.BringWindowToTop(hwnd)
+                        user32.SetForegroundWindow(hwnd)
+
+                    # Elevate Explorer window to topmost
+                    user32.SetWindowPos(hwnd, -1, 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0040)
+            except Exception as e:
+                print(f"[Album] Exception elevating Explorer: {e}")
+
+        for delay in (150, 350, 700, 1200):
+            self.after(delay, _bring_explorer_on_top)
 
     def _open_media(self, media_path: Path):
         """Opens a media file without closing or hiding the navbar."""
+        if self.on_media_opened:
+            try:
+                self.on_media_opened()
+            except Exception:
+                pass
         try:
             os.startfile(str(media_path))
         except Exception:

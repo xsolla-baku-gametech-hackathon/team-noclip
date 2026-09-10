@@ -208,11 +208,23 @@ class GameBarOverlay:
             except Exception:
                 pass
 
+        self.hide_backdrop()
+
+    def hide_backdrop(self):
+        """Hides the dim backdrop shadow without closing or affecting the navbar or gallery."""
         if self.backdrop and self.backdrop.winfo_exists():
             try:
                 self.backdrop.withdraw()
             except Exception:
                 pass
+
+    def _on_open_folder_requested(self):
+        """Hides the dim backdrop shadow and elevates the recordings folder to the topmost layer."""
+        self.hide_backdrop()
+        if self.window and self.window.winfo_exists():
+            self.window.lift()
+        if self.visual_memories_tab:
+            self.visual_memories_tab._open_recordings_folder()
 
     def _build_bar(self, width: int, height: int):
         # Outer Border Shell
@@ -427,6 +439,8 @@ class GameBarOverlay:
             on_record_request=self.on_toggle_record,
             on_pause_request=self.on_toggle_pause,
             on_close_tab=self.toggle_album,
+            on_open_folder=self._on_open_folder_requested,
+            on_media_opened=self.hide_backdrop,
             video_recorder=self.video_rec
         )
         self.visual_memories_tab.pack(fill="both", expand=True)
