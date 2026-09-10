@@ -8,8 +8,6 @@ All captures are saved directly in Documents/XSOLLA_gamerecap/captures/.
 """
 
 import os
-import sys
-import ctypes
 import subprocess
 import tkinter as tk
 from pathlib import Path
@@ -17,57 +15,8 @@ from typing import Optional, Callable, List
 import cv2
 from PIL import Image, ImageTk, ImageDraw, ImageFont
 
-try:
-    import win32gui
-    import win32con
-    import win32com.client
-except ImportError:
-    win32gui = None
-    win32con = None
-    win32com = None
-
 from config import SCREENSHOTS_DIR, make_window_invisible_to_capture
 from polaroid_service import PolaroidService
-
-
-def force_foreground_hwnd(hwnd: int):
-    """
-    Brings a target window handle to the absolute front on Windows,
-    bypassing foreground locks and OS focus restrictions.
-    """
-    if not hwnd or sys.platform != "win32":
-        return
-    try:
-        user32 = ctypes.windll.user32
-        kernel32 = ctypes.windll.kernel32
-
-        if not user32.IsWindow(hwnd):
-            return
-
-        # Restore window if minimized (SW_RESTORE = 9)
-        user32.ShowWindow(hwnd, 9)
-
-        # Bypass Windows SetForegroundWindow restrictions by attaching thread input
-        current_thread = kernel32.GetCurrentThreadId()
-        fg_hwnd = user32.GetForegroundWindow()
-        fg_thread = user32.GetWindowThreadProcessId(fg_hwnd, None) if fg_hwnd else 0
-
-        if fg_thread and fg_thread != current_thread:
-            user32.AttachThreadInput(current_thread, fg_thread, True)
-
-        # Bring to top of Z-order:
-        # HWND_TOPMOST (-1) temporarily floats it above everything
-        user32.SetWindowPos(hwnd, -1, 0, 0, 0, 0, 0x0001 | 0x0002)
-        # HWND_NOTOPMOST (-2) drops persistent topmost while leaving it at the front of standard windows
-        user32.SetWindowPos(hwnd, -2, 0, 0, 0, 0, 0x0001 | 0x0002)
-        user32.BringWindowToTop(hwnd)
-        user32.SetForegroundWindow(hwnd)
-        user32.SetActiveWindow(hwnd)
-
-        if fg_thread and fg_thread != current_thread:
-            user32.AttachThreadInput(current_thread, fg_thread, False)
-    except Exception as e:
-        print(f"[Album] Failed to force foreground: {e}")
 
 
 
@@ -462,7 +411,6 @@ class AlbumViewerWindow:
             command=self._open_captures_folder
         )
         btn_folder.pack(side="left", padx=4)
-        btn_folder.bind("<Button-1>", lambda e: self._open_captures_folder())
 
         btn_refresh = tk.Button(
             btn_box,
@@ -562,66 +510,22 @@ class AlbumViewerWindow:
             self._scroll_animating = False
 
     def _open_captures_folder(self):
-        """Opens the captures directory in Windows File Explorer and forces it to the absolute front."""
-        folder_path = SCREENSHOTS_DIR.resolve()
-        folder_str = str(folder_path)
+        """Opens the captures directory in Windows File Explorer directly in the foreground."""
+        folder_path = str(SCREENSHOTS_DIR.resolve())
 
-        # 1. Lower Album window so it won't obscure the newly opened explorer window
+        # Ensure Album window yields topmost priority so File Explorer opens in front
         if self.window and self.window.winfo_exists():
             self.window.attributes("-topmost", False)
             self.window.lower()
 
-        # 2. Open folder directly via Windows ShellExecute (os.startfile) or explorer.exe
+        # Direct, reliable launch of Windows File Explorer
         try:
-            os.startfile(folder_str)
+            subprocess.Popen(["explorer.exe", folder_path])
         except Exception:
             try:
-                subprocess.Popen(["explorer.exe", folder_str])
+                os.startfile(folder_path)
             except Exception as err:
                 print(f"[Album] Error opening captures folder: {err}")
-
-        # 3. Schedule locating and forcing the Explorer window to the front
-        for delay in (120, 350, 700, 1200):
-            if self.window and self.window.winfo_exists():
-                self.window.after(delay, lambda f=folder_str: self._locate_and_focus_explorer(f))
-
-    def _locate_and_focus_explorer(self, folder_str: str):
-        """Finds the Explorer window for the captures directory and pulls it to the front."""
-        target_hwnd = None
-        if win32com:
-            try:
-                shell = win32com.client.Dispatch("Shell.Application")
-                for w in shell.Windows():
-                    try:
-                        url = getattr(w, "LocationURL", "") or ""
-                        url_norm = url.replace("file:///", "").replace("/", "\\").lower()
-                        name = getattr(w, "LocationName", "") or ""
-                        if folder_str.lower() in url_norm or "captures" in name.lower() or "captures" in url_norm:
-                            target_hwnd = w.HWND
-                            break
-                    except Exception:
-                        pass
-            except Exception:
-                pass
-
-        if not target_hwnd and win32gui:
-            try:
-                def enum_cb(hwnd, extra):
-                    if win32gui.IsWindowVisible(hwnd):
-                        cls = win32gui.GetClassName(hwnd)
-                        if cls == "CabinetWClass":
-                            title = win32gui.GetWindowText(hwnd).lower()
-                            if "captures" in title or "xsolla" in title:
-                                extra.append(hwnd)
-                found = []
-                win32gui.EnumWindows(enum_cb, found)
-                if found:
-                    target_hwnd = found[0]
-            except Exception:
-                pass
-
-        if target_hwnd:
-            force_foreground_hwnd(target_hwnd)
 
     def _open_media(self, media_path: Path):
         """Opens a screenshot or video file and yields foreground focus to the media viewer."""
@@ -631,7 +535,10 @@ class AlbumViewerWindow:
         try:
             os.startfile(str(media_path))
         except Exception as e:
-            print(f"[Album] Error opening media {media_path}: {e}")
+            try:
+                subprocess.Popen(["explorer.exe", str(media_path)])
+            except Exception:
+                pass
 
     def _extract_video_thumbnail(self, video_path: Path, target_w: int = 360) -> Optional[Image.Image]:
         """Extracts a high-quality video thumbnail with an overlaid duration badge and play icon."""
