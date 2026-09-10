@@ -5,12 +5,20 @@ official releases (Steam, Epic, Xbox) and cracked/standalone executables.
 """
 
 import os
+import sys
 import json
 from pathlib import Path
 
-BASE_DIR = Path(__file__).resolve().parent
+if getattr(sys, 'frozen', False):
+    BASE_DIR = Path(sys.executable).resolve().parent
+    RESOURCE_DIR = Path(getattr(sys, '_MEIPASS', BASE_DIR))
+else:
+    BASE_DIR = Path(__file__).resolve().parent
+    RESOURCE_DIR = BASE_DIR
+
 DATA_DIR = BASE_DIR / "data"
 CONFIG_FILE = DATA_DIR / "config.json"
+ASSETS_DIR = RESOURCE_DIR / "assets"
 
 # Default supported games with their typical executable names & window titles.
 # Both official Steam/Epic versions and cracked/portable/modded names are supported!

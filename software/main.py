@@ -61,8 +61,9 @@ class XsollaGameRecapApp:
         # Handle launch arguments
         if demo_mode:
             self.root.after(800, self._run_demo_sequence)
-        elif open_immediately:
-            self.root.after(300, self.gamebar.open)
+        else:
+            # Open the GameBar immediately so the user sees the real app right away!
+            self.root.after(400, self.gamebar.open)
 
     def _on_game_launched(self, game: dict, pid: int, window_title: str):
         print(f"[App] Game Launched: {game.get('name')} (PID: {pid})")

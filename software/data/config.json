@@ -158,6 +158,20 @@
       "icon": "🎮",
       "theme_color": "#9d4edd",
       "is_custom": true
+    },
+    {
+      "id": "custom_3",
+      "name": "My Custom RPG",
+      "genre": "Custom Game",
+      "executables": [
+        "custom_game.exe"
+      ],
+      "window_keywords": [
+        "custom game"
+      ],
+      "icon": "🎮",
+      "theme_color": "#9d4edd",
+      "is_custom": true
     }
   ]
 }

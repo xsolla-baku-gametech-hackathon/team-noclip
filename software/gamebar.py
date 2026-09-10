@@ -50,6 +50,15 @@ class GameBarOverlay:
         self.window.attributes("-topmost", True)
         self.window.configure(bg="#0c0e14")
 
+        # Set Xsolla App Icon
+        from config import ASSETS_DIR
+        ico_file = ASSETS_DIR / "xsolla_icon.ico"
+        if ico_file.exists():
+            try:
+                self.window.iconbitmap(str(ico_file))
+            except Exception:
+                pass
+
         # Dimensions & Centering
         width = 860
         height = 560

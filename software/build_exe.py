@@ -14,11 +14,16 @@ def build():
     print("[Build] Packaging Xsolla Game Recap into standalone .exe...")
     os.chdir(str(BASE_DIR))
 
+    icon_path = str(BASE_DIR / "assets" / "xsolla_icon.ico")
+    assets_arg = f"{BASE_DIR / 'assets'};assets"
+
     cmd = [
         sys.executable,
         "-m", "PyInstaller",
         "--noconsole",
         "--name=XsollaGameRecap",
+        f"--icon={icon_path}",
+        f"--add-data={assets_arg}",
         "--clean",
         "--onefile",
         "main.py"
@@ -27,8 +32,13 @@ def build():
     print(f"[Build] Executing: {' '.join(cmd)}")
     res = subprocess.run(cmd)
     if res.returncode == 0:
+        import shutil
+        built_exe = BASE_DIR / "dist" / "XsollaGameRecap.exe"
+        dest_exe = BASE_DIR / "XsollaGameRecap.exe"
+        shutil.copy2(str(built_exe), str(dest_exe))
         print("\n[Build] SUCCESS! Standalone executable generated at:")
-        print(f"       {BASE_DIR / 'dist' / 'XsollaGameRecap.exe'}\n")
+        print(f"       {dest_exe}")
+        print(f"       {built_exe}\n")
     else:
         print(f"[Build] PyInstaller exited with code {res.returncode}")
 

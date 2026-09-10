@@ -5,6 +5,7 @@ even when high-performance full-screen games or cracked games are actively runni
 """
 
 import ctypes
+import ctypes.wintypes
 import threading
 from typing import Callable, Optional
 
