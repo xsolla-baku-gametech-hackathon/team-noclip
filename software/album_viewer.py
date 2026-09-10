@@ -462,6 +462,7 @@ class AlbumViewerWindow:
             command=self._open_captures_folder
         )
         btn_folder.pack(side="left", padx=4)
+        btn_folder.bind("<Button-1>", lambda e: self._open_captures_folder())
 
         btn_refresh = tk.Button(
             btn_box,
@@ -570,24 +571,17 @@ class AlbumViewerWindow:
             self.window.attributes("-topmost", False)
             self.window.lower()
 
-        # 2. Open folder using Shell.Application or system fallback
-        opened = False
-        if win32com:
+        # 2. Open folder directly via Windows ShellExecute (os.startfile) or explorer.exe
+        try:
+            os.startfile(folder_str)
+        except Exception:
             try:
-                shell = win32com.client.Dispatch("Shell.Application")
-                shell.Open(folder_str)
-                opened = True
-            except Exception:
-                opened = False
-
-        if not opened:
-            try:
-                os.startfile(folder_str)
-            except Exception:
                 subprocess.Popen(["explorer.exe", folder_str])
+            except Exception as err:
+                print(f"[Album] Error opening captures folder: {err}")
 
         # 3. Schedule locating and forcing the Explorer window to the front
-        for delay in (60, 200, 500, 1000):
+        for delay in (120, 350, 700, 1200):
             if self.window and self.window.winfo_exists():
                 self.window.after(delay, lambda f=folder_str: self._locate_and_focus_explorer(f))
 
