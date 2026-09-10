@@ -1,6 +1,5 @@
 import json
 import logging
-from typing import Optional
 import httpx
 
 from backend.config import settings
