@@ -29,11 +29,12 @@ internal static class CropResolver
 
         // Determine growth and watering state
         string state;
+        int phaseCount = crop.phaseDays != null ? crop.phaseDays.Count : 5;
         if (crop.dead.Value)
         {
             state = "dead";
         }
-        else if (crop.currentPhase.Value >= crop.phaseDays.Count - 1 || 
+        else if ((phaseCount > 0 && crop.currentPhase.Value >= phaseCount - 1) || 
                 (crop.fullyGrown.Value && crop.dayOfCurrentPhase.Value <= 0))
         {
             state = "ready";
