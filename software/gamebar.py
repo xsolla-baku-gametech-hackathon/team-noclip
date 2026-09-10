@@ -173,25 +173,28 @@ class GameBarOverlay:
         bar.bind("<Button-1>", self._start_drag)
         bar.bind("<B1-Motion>", self._on_drag)
 
-        # 1. Stacked Xsolla Logo (Mascot on top, XSOLLA wordmark below)
+        # 1. Standalone Clean Xsolla Logo
         logo_frame = tk.Frame(bar, bg="#0d1117", padx=14)
         logo_frame.pack(side="left", fill="y")
         logo_frame.bind("<Button-1>", self._start_drag)
         logo_frame.bind("<B1-Motion>", self._on_drag)
 
-        logo_path = ASSETS_DIR / "xsolla_stacked_logo.png"
+        logo_path = ASSETS_DIR / "xsolla_mascot_clean.png"
+        if not logo_path.exists():
+            logo_path = ASSETS_DIR / "xsolla_logo.png"
+
         if logo_path.exists():
             try:
-                pil_logo = Image.open(str(logo_path))
-                # Fit nicely within 42px height
-                lh = 42
-                lw = int(pil_logo.width * (lh / pil_logo.height))
-                resized = pil_logo.resize((lw, lh), Image.Resampling.LANCZOS)
-                self._logo_photo = ImageTk.PhotoImage(resized)
-                lbl_logo = tk.Label(logo_frame, image=self._logo_photo, bg="#0d1117")
-                lbl_logo.pack(side="left")
-                lbl_logo.bind("<Button-1>", self._start_drag)
-                lbl_logo.bind("<B1-Motion>", self._on_drag)
+                with Image.open(str(logo_path)) as pil_logo:
+                    # Clean standalone logo sized to fit 36px height
+                    lh = 36
+                    lw = int(pil_logo.width * (lh / pil_logo.height))
+                    resized = pil_logo.resize((lw, lh), Image.Resampling.LANCZOS)
+                    self._logo_photo = ImageTk.PhotoImage(resized)
+                    lbl_logo = tk.Label(logo_frame, image=self._logo_photo, bg="#0d1117")
+                    lbl_logo.pack(side="left", pady=10)
+                    lbl_logo.bind("<Button-1>", self._start_drag)
+                    lbl_logo.bind("<B1-Motion>", self._on_drag)
             except Exception:
                 pass
 
