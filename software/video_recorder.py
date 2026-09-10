@@ -176,6 +176,8 @@ class VideoRecorderService:
         except Exception as err:
             print(f"[VideoRecorder] Initial frame grab failed: {err}")
             self.is_recording = False
+            if self.on_state_change:
+                self.on_state_change(False, "00:00")
             return
 
         target_fps = 20.0
@@ -186,6 +188,8 @@ class VideoRecorderService:
         if not writer.isOpened():
             print(f"[VideoRecorder] Error opening VideoWriter for {self.current_filepath}")
             self.is_recording = False
+            if self.on_state_change:
+                self.on_state_change(False, "00:00")
             return
 
         try:
