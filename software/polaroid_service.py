@@ -11,7 +11,7 @@ import winsound
 import threading
 from pathlib import Path
 from typing import Optional, Dict, List
-from config import SCREENSHOTS_DIR, ensure_data_dir
+from config import RECORDINGS_DIR, RECAP_DIR, ensure_data_dir
 from capture_utils import grab_screen_with_cursor
 
 
@@ -51,7 +51,7 @@ class PolaroidService:
 
         # 2. Save pure, uncompressed high-quality PNG with zero watermarks or overlays
         filename = f"screenshot_{clean_name}_{timestamp}.png"
-        filepath = SCREENSHOTS_DIR / filename
+        filepath = RECORDINGS_DIR / filename
         try:
             img.save(str(filepath), "PNG", compress_level=1)
         except Exception as err:
@@ -84,15 +84,20 @@ class PolaroidService:
     def get_recent_memories(self, limit: int = 40) -> List[Path]:
         """Returns sorted list of captured high-quality screenshots and video clips (newest first)."""
         ensure_data_dir()
-        if not SCREENSHOTS_DIR.exists():
-            return []
-
-        # Find screenshots and video recordings without redundant glob scans
         valid_extensions = {".png", ".jpg", ".jpeg", ".mp4", ".mkv", ".avi", ".mov"}
-        unique_files = [
-            p for p in SCREENSHOTS_DIR.iterdir()
-            if p.is_file() and p.suffix.lower() in valid_extensions
-        ]
+        search_dirs = [RECORDINGS_DIR]
+        legacy_dir = RECAP_DIR / "captures"
+        if legacy_dir.exists() and legacy_dir.resolve() != RECORDINGS_DIR.resolve():
+            search_dirs.append(legacy_dir)
+
+        seen_names = set()
+        unique_files = []
+        for sdir in search_dirs:
+            if sdir.exists():
+                for p in sdir.iterdir():
+                    if p.is_file() and p.suffix.lower() in valid_extensions and p.name not in seen_names:
+                        seen_names.add(p.name)
+                        unique_files.append(p)
 
         def _safe_mtime(p: Path) -> float:
             try:

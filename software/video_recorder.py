@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Optional, Dict, Callable
 import cv2
 import numpy as np
-from config import SCREENSHOTS_DIR, ensure_data_dir
+from config import RECORDINGS_DIR, ensure_data_dir
 from capture_utils import grab_screen_with_cursor
 
 
@@ -58,8 +58,8 @@ class VideoRecorderService:
             clean_name = "game"
 
         self.current_filename = f"clip_{clean_name}_{timestamp}.mp4"
-        # Saves directly to captures folder alongside screenshots
-        self.current_filepath = SCREENSHOTS_DIR / self.current_filename
+        # Saves directly to recordings folder
+        self.current_filepath = RECORDINGS_DIR / self.current_filename
 
         self.is_recording = True
         self.is_paused = False
