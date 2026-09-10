@@ -96,11 +96,11 @@ class WatchingBanner:
                 self._logo_photo = None
 
         # Clean Typography
-        canvas.create_text(text_x, 22, text="⚡ Xsolla Game Recap is Watching",
+        canvas.create_text(text_x, 22, text="Xsolla Game Recap is Watching",
                            fill="#ffffff", font=("Segoe UI", 10, "bold"), anchor="w")
 
         short_game = (game_name[:22] + "...") if len(game_name) > 22 else game_name
-        canvas.create_text(text_x, 46, text=f"Hooked: {short_game}  •  [{shortcut}]",
+        canvas.create_text(text_x, 46, text=f"Hooked: {short_game}  |  Press {shortcut}",
                            fill="#8ba4b6", font=("Segoe UI", 9), anchor="w")
 
         # Subtle audio cue

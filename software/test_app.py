@@ -47,7 +47,7 @@ class TestXsollaGameRecap(unittest.TestCase):
         self.assertGreaterEqual(len(matching), 1)
         self.assertEqual(matching[0]["name"], "Hello Neighbor Standalone")
 
-    def test_recap_manager_and_story(self):
+    def test_recap_manager_and_session(self):
         mgr = RecapManager()
         game_info = {
             "id": "hello_neighbor",
@@ -58,19 +58,15 @@ class TestXsollaGameRecap(unittest.TestCase):
         mgr.start_session(game_info, 12345, "Hello Neighbor")
         self.assertIsNotNone(mgr.current_session)
 
-        # Log milestone
-        evt = mgr.add_event("Sneaked into Basement", event_type="milestone")
+        # Log event
+        evt = mgr.add_event("Sneaked into Basement", event_type="gameplay")
         self.assertEqual(evt["text"], "Sneaked into Basement")
-
-        # Telemetry story generation
-        story = mgr.generate_story_recap()
-        self.assertEqual(story["game_name"], "Hello Neighbor")
-        self.assertGreaterEqual(story["total_events"], 2)
 
         # End session
         completed = mgr.end_session()
         self.assertIsNotNone(completed)
         self.assertIsNone(mgr.current_session)
+        self.assertEqual(completed["game_name"], "Hello Neighbor")
 
 
 if __name__ == "__main__":

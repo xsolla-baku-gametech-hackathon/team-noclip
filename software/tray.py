@@ -41,10 +41,10 @@ class SystemTrayIcon:
         img = self._load_icon_image()
 
         menu_items = [
-            item("⚡ Open GameBar (Ctrl+Shift+X)", lambda: self.on_open_gamebar(), default=True),
-            item("🔔 Test Watching Banner", lambda: self.on_test_banner()),
+            item("Open GameBar (Ctrl+Shift+X)", lambda: self.on_open_gamebar(), default=True),
+            item("Test Watching Banner", lambda: self.on_test_banner()),
             Menu.SEPARATOR,
-            item("✕ Quit Xsolla Game Recap", lambda: self.on_quit())
+            item("Quit Xsolla Game Recap", lambda: self.on_quit())
         ]
 
         self.icon = pystray.Icon(

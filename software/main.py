@@ -44,7 +44,6 @@ class XsollaGameRecapApp:
             self.root,
             self.detector,
             self.recap_mgr,
-            on_test_banner=self._trigger_test_banner,
             on_quit_app=self.shutdown
         )
         self.hotkey_listener = GlobalHotkeyListener(on_hotkey=self._on_hotkey)
@@ -56,16 +55,16 @@ class XsollaGameRecapApp:
             on_quit=self.shutdown
         )
 
-        # Start listeners, watchers & tray
+        # Start listeners, watchers and tray
         self.hotkey_listener.start()
         self.detector.start_monitoring(interval_sec=self.config.get("scan_interval_sec", 1.0))
         self.tray.start()
 
         print("==========================================================")
-        print("  ⚡ XSOLLA GAME RECAP ACTIVE")
-        print("  • Background game detection: ON")
-        print("  • System Tray Icon: Active in Windows taskbar navbar")
-        print("  • In-Game Shortcut: [Ctrl + Shift + X] (or Alt + X)")
+        print("  XSOLLA GAME RECAP ACTIVE")
+        print("  Background game detection: ON")
+        print("  System Tray Icon: Active in Windows taskbar navbar")
+        print("  In-Game Shortcut: [Ctrl + Shift + X] (or Alt + X)")
         print("==========================================================")
 
         if open_immediately:

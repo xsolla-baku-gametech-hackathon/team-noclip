@@ -1,6 +1,6 @@
 """
 Xsolla Game Recap - Configuration Engine
-Ultra lightweight settings and paths without static lists or clutter.
+Stores user recaps and settings locally in Documents/XSOLLA_gamerecap/.
 """
 
 import os
@@ -16,34 +16,47 @@ else:
     BASE_DIR = Path(__file__).resolve().parent
     BUNDLE_DIR = BASE_DIR
 
-DATA_DIR = BASE_DIR / "data"
 ASSETS_DIR = BUNDLE_DIR / "assets"
-CONFIG_FILE = DATA_DIR / "config.json"
+
+# Local player storage in Documents/XSOLLA_gamerecap/
+DOCUMENTS_DIR = Path.home() / "Documents"
+RECAP_DIR = DOCUMENTS_DIR / "XSOLLA_gamerecap"
+SESSIONS_DIR = RECAP_DIR / "sessions"
+SCREENSHOTS_DIR = RECAP_DIR / "captures"
+CONFIG_FILE = RECAP_DIR / "config.json"
 
 DEFAULT_CONFIG = {
     "app_name": "Xsolla Game Recap",
-    "version": "1.2.0",
+    "version": "1.3.0",
     "hotkey": "Ctrl+Shift+X",
     "hotkey_alt": "Alt+X",
-    "toast_duration_ms": 3200,
+    "toast_duration_ms": 3000,
     "enable_toast_sound": True,
     "scan_interval_sec": 1.0,
     "smart_heuristic_detection": True,
-    "saas_api_url": "http://localhost:3000/api/recap",
-    "saas_api_token": "xsolla_baku_token",
     "custom_apps": []
 }
 
 
 def ensure_data_dir():
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-    (DATA_DIR / "screenshots").mkdir(parents=True, exist_ok=True)
-    (DATA_DIR / "sessions").mkdir(parents=True, exist_ok=True)
+    RECAP_DIR.mkdir(parents=True, exist_ok=True)
+    SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
+    SCREENSHOTS_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def load_config() -> dict:
     ensure_data_dir()
     if not CONFIG_FILE.exists():
+        # Check if legacy local data config exists and migrate
+        legacy_config = BASE_DIR / "data" / "config.json"
+        if legacy_config.exists():
+            try:
+                with open(legacy_config, "r", encoding="utf-8") as f:
+                    legacy_data = json.load(f)
+                    save_config(legacy_data)
+                    return legacy_data
+            except Exception:
+                pass
         save_config(DEFAULT_CONFIG)
         return dict(DEFAULT_CONFIG)
 
