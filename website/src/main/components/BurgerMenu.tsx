@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import CTAButton from './CTAButton';
+import ThemeToggle from './ThemeToggle';
 
 const NAV_LINKS = ['Work', 'About', 'Blog'];
 const SOCIALS = ['Pinterest', 'Behance', 'Letterboxd'];
@@ -11,7 +12,8 @@ const BurgerMenu = () => {
   return (
     <>
       <div className="burger-wrapper">
-        <div className="pl-5 pr-5 md:pr-10">
+        <div className="flex items-center gap-3 pl-5 pr-5 md:pr-10">
+          <ThemeToggle />
           <button
             className={`burger-btn ${open ? 'open' : ''}`}
             onClick={() => setOpen((v) => !v)}

@@ -8,7 +8,7 @@ const ArrowIcon = ({ size }: { size: number }) => (
   <svg width={size} height={size} viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
     <path
       d="M5 13L13 5M13 5H6M13 5V12"
-      stroke="white"
+      stroke="currentColor"
       strokeWidth="2"
       strokeLinecap="round"
       strokeLinejoin="round"

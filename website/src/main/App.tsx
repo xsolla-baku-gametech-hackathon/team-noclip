@@ -6,7 +6,7 @@ import Hero from './sections/Hero';
 
 function MainApp() {
   return (
-    <div className="bg-studio-bg text-studio-cream font-sans">
+    <div className="bg-studio-bg dark:bg-studio-bg-night text-studio-cream font-sans transition-colors duration-300">
       <Splash />
 
       <div className="logo-wrapper">

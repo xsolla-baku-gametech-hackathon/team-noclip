@@ -117,6 +117,12 @@
   padding: 12px 32px;
   white-space: nowrap;
 }
+.dark .cta-btn-bg {
+  background: #1a1b1f;
+}
+.dark .cta-btn-text {
+  color: #f4f1e8;
+}
 @media (min-width: 768px) {
   .cta-btn-text {
     font-size: 18px;
@@ -133,6 +139,7 @@
   height: 48px;
   border-radius: 50%;
   background: #75c5de;
+  color: #111111;
   flex-shrink: 0;
   transition: transform 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
 }
@@ -192,6 +199,7 @@
   height: 38px;
   border-radius: 50%;
   background: #75c5de;
+  color: #111111;
   flex-shrink: 0;
   transition: transform 0.3s ease;
 }
@@ -286,6 +294,53 @@
 }
 .burger-btn.open .bar:last-child {
   transform: rotate(-45deg) translate(2px, -2px);
+}
+
+.dark .burger-btn {
+  background: #1a1b1f;
+}
+.dark .burger-btn .bar {
+  background: #f4f1e8;
+}
+.dark .burger-btn:hover {
+  background: #f4f1e8;
+}
+.dark .burger-btn:hover .bar {
+  background: #111111;
+}
+.dark .burger-btn.open {
+  background: #f4f1e8;
+}
+.dark .burger-btn.open .bar {
+  background: #111111;
+}
+
+/* ===== THEME TOGGLE ===== */
+.theme-toggle-btn {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f4f1e8;
+  color: #111111;
+  transition:
+    background 0.3s ease,
+    color 0.3s ease;
+}
+.theme-toggle-btn:hover {
+  background: #75c5de;
+}
+.dark .theme-toggle-btn {
+  background: #1a1b1f;
+  color: #f4f1e8;
+}
+.dark .theme-toggle-btn:hover {
+  background: #75c5de;
+  color: #111111;
 }
 
 /* ===== MENU PANEL ===== */
