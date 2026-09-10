@@ -10,11 +10,12 @@ using XsollaGameRecap.Models;
 
 namespace XsollaGameRecap.Services;
 
-internal sealed class RecapApiClient
+internal sealed class RecapApiClient : IDisposable
 {
     private readonly HttpClient httpClient;
     private readonly string endpoint;
     private readonly string healthEndpoint;
+    private bool disposed;
 
     // In-memory cache to prevent redundant network calls within the same game timeframe
     private (string cacheKey, RecapResponseDto response, DateTime timestamp)? cacheEntry;
@@ -31,14 +32,27 @@ internal sealed class RecapApiClient
     {
         this.endpoint = endpoint;
         
-        // Derive health endpoint from the main recap endpoint URL
-        Uri baseUri = new Uri(endpoint);
+        // Derive health endpoint from the main recap endpoint URL with safe fallback
+        if (!Uri.TryCreate(endpoint, UriKind.Absolute, out Uri? baseUri))
+        {
+            baseUri = new Uri("http://127.0.0.1:8000/api/recap");
+            this.endpoint = baseUri.ToString();
+        }
         this.healthEndpoint = new Uri(baseUri, "/health").ToString();
 
         this.httpClient = new HttpClient
         {
             Timeout = TimeSpan.FromSeconds(timeoutSeconds)
         };
+    }
+
+    public void Dispose()
+    {
+        if (!disposed)
+        {
+            httpClient.Dispose();
+            disposed = true;
+        }
     }
 
     public async Task<bool> CheckHealthAsync()
