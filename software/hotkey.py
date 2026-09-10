@@ -133,5 +133,3 @@ class GlobalHotkeyListener:
         user32.UnregisterHotKey(None, HOTKEY_ID_RECORD_COMBO)
         user32.UnregisterHotKey(None, HOTKEY_ID_PAUSE_F10)
         user32.UnregisterHotKey(None, HOTKEY_ID_PAUSE_COMBO)
-        user32.UnregisterHotKey(None, HOTKEY_ID_RECORD_F9)
-        user32.UnregisterHotKey(None, HOTKEY_ID_RECORD_COMBO)
