@@ -93,6 +93,11 @@ class GameBarOverlay:
                     make_window_visible_to_capture(self.window)
                 else:
                     make_window_invisible_to_capture(self.window)
+            if self.backdrop and self.backdrop.winfo_exists():
+                if include_gb:
+                    make_window_visible_to_capture(self.backdrop)
+                else:
+                    make_window_invisible_to_capture(self.backdrop)
             if self.profile_popup and self.profile_popup.winfo_exists():
                 if include_gb:
                     make_window_visible_to_capture(self.profile_popup)
@@ -136,12 +141,12 @@ class GameBarOverlay:
             # Clicking anywhere on the dim background or pressing ESC closes the overlay
             self.backdrop.bind("<Button-1>", lambda e: self.close())
             self.backdrop.bind("<Escape>", lambda e: self.close())
-            make_window_invisible_to_capture(self.backdrop)
+            self._apply_capture_affinity()
 
         self.backdrop.geometry(f"{w}x{h}+{x}+{y}")
         self.backdrop.deiconify()
         self.backdrop.lift()
-        make_window_invisible_to_capture(self.backdrop)
+        self._apply_capture_affinity()
 
     def open(self, show_album: bool = False, show_recap: bool = False):
         """Displays the dim backdrop and the horizontal NVIDIA style GameBar."""
@@ -480,7 +485,7 @@ class GameBarOverlay:
         self.profile_popup.attributes("-topmost", True)
         self.profile_popup.attributes("-alpha", 0.0)
 
-        make_window_invisible_to_capture(self.profile_popup)
+        self._apply_capture_affinity()
 
         border = tk.Frame(
             self.profile_popup,

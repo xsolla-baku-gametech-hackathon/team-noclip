@@ -204,6 +204,14 @@ def set_window_capture_affinity(window, exclude_from_capture: bool = True) -> bo
         res = ctypes.windll.user32.SetWindowDisplayAffinity(target_hwnd, affinity)
         if not res and hwnd != target_hwnd:
             res = ctypes.windll.user32.SetWindowDisplayAffinity(hwnd, affinity)
+        try:
+            frame_str = window.wm_frame()
+            if frame_str:
+                frame_hwnd = int(frame_str, 16)
+                if frame_hwnd and frame_hwnd != hwnd and frame_hwnd != target_hwnd:
+                    ctypes.windll.user32.SetWindowDisplayAffinity(frame_hwnd, affinity)
+        except Exception:
+            pass
         return bool(res)
     except Exception as err:
         print(f"[WindowAffinity] Error setting capture affinity: {err}")

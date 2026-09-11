@@ -227,10 +227,8 @@ class XsollaGameRecapApp:
 
     def _on_capture_requested(self):
         """Called when F11 or SNAP button clicked."""
-        if not auth_state.is_logged_in():
-            return
         active = self.detector.active_game
-        game_name = active.get("name") if active else "Highlight Capture"
+        game_name = active.get("name") if active else ("Xsolla Login" if not auth_state.is_logged_in() else "Highlight Capture")
         duration = self.detector.get_session_duration_str() if active else "00:00:00"
 
         result = self.polaroid_svc.capture_memory(game_name=game_name, session_duration=duration)

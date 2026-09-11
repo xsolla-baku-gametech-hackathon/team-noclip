@@ -42,7 +42,19 @@ class TestRecapIntegration(unittest.TestCase):
             self.assertEqual(analysis["game_name"], g)
             self.assertEqual(analysis["source"], "game_session")
 
-    def test_recap_generation(self):
+    from unittest.mock import patch
+
+    @patch("requests.post")
+    def test_recap_generation(self, mock_post):
+        mock_post.return_value.status_code = 200
+        mock_post.return_value.json.return_value = {
+            "recap": "PREVIOUSLY ON CYBERPUNK 2077: Night City awaits.",
+            "structured": {
+                "previously_on": "Cyberpunk 2077: V completed a major heist.",
+                "what_you_were_up_to": ["Infiltrated Konpeki Plaza", "Met with Johnny Silverhand"],
+                "next_objectives": ["Head to Afterlife", "Upgrade cyberware"]
+            }
+        }
         save_data = save_analyzer.analyze_game_save("Cyberpunk 2077")
         recap = ai_recap.generate_recap(save_data)
         self.assertIn("previously_on", recap)

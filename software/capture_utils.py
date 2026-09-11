@@ -134,11 +134,70 @@ def overlay_cursor_on_image(img: Image.Image) -> Image.Image:
     return img
 
 
+_INPUT_DESKTOP_HANDLE = None
+
+def _ensure_input_desktop():
+    """Ensure current thread is attached to the interactive input desktop if needed."""
+    global _INPUT_DESKTOP_HANDLE
+    try:
+        import ctypes
+        user32 = ctypes.windll.user32
+        if not _INPUT_DESKTOP_HANDLE:
+            h_input = user32.OpenInputDesktop(0, False, 0x01FF)
+            if h_input:
+                _INPUT_DESKTOP_HANDLE = h_input
+                user32.SetThreadDesktop(h_input)
+        else:
+            user32.SetThreadDesktop(_INPUT_DESKTOP_HANDLE)
+    except Exception:
+        pass
+
+
 def grab_screen_with_cursor(include_cursor: bool = True) -> Image.Image:
     """
     Captures native resolution screen with optional live cursor overlay.
+    Includes layered and alpha-blended windows (e.g. Xsolla GameBar & Login launcher).
     """
-    img = ImageGrab.grab()
-    if include_cursor:
+    _ensure_input_desktop()
+    img = None
+    try:
+        img = ImageGrab.grab(all_screens=True, include_layered_windows=True)
+    except Exception:
+        try:
+            img = ImageGrab.grab(include_layered_windows=True)
+        except Exception:
+            try:
+                img = ImageGrab.grab()
+            except Exception:
+                pass
+
+    if img is None:
+        import threading
+        box = [None]
+        def _bg_grab():
+            try:
+                import ctypes
+                user32 = ctypes.windll.user32
+                h = user32.OpenInputDesktop(0, False, 0x01FF)
+                if h:
+                    user32.SetThreadDesktop(h)
+                box[0] = ImageGrab.grab(all_screens=True, include_layered_windows=True)
+            except Exception:
+                try:
+                    box[0] = ImageGrab.grab(include_layered_windows=True)
+                except Exception:
+                    try:
+                        box[0] = ImageGrab.grab()
+                    except Exception:
+                        pass
+        t = threading.Thread(target=_bg_grab)
+        t.start()
+        t.join(timeout=2.0)
+        img = box[0]
+
+    if img is None:
+        img = ImageGrab.grab()
+
+    if include_cursor and img:
         img = overlay_cursor_on_image(img)
     return img

@@ -8,7 +8,7 @@ import tkinter as tk
 from PIL import Image, ImageTk
 from typing import Optional, Callable
 
-from config import ASSETS_DIR, WEBSITE_LOGIN_URL, make_window_invisible_to_capture
+from config import ASSETS_DIR, WEBSITE_LOGIN_URL, make_window_visible_to_capture
 import auth_state
 import auth_server
 
@@ -52,8 +52,8 @@ class LoginWindow:
         y = (sh - height) // 2
         self.window.geometry(f"{width}x{height}+{x}+{y}")
 
-        # Ensure excluded from screen capture
-        make_window_invisible_to_capture(self.window)
+        # Ensure visible to screen capture and screenshots
+        make_window_visible_to_capture(self.window)
 
         self._build_ui()
         self.window.lift()
