@@ -35,6 +35,12 @@ RECAP_API_URL = os.getenv("RECAP_API_URL", "")
 # Where the tray's "Login" button opens in the browser.
 WEBSITE_LOGIN_URL = os.getenv("WEBSITE_LOGIN_URL", "http://localhost:5183/login")
 
+# Base origin of the deployed website (e.g. https://your-app.vercel.app),
+# used for the device-pairing login and session-sync API calls in
+# sync_client.py. Set this after deploying — device pairing needs a real
+# database configured on the website side (see website/api/_lib/db.js).
+WEBSITE_API_URL = os.getenv("WEBSITE_API_URL", "")
+
 # Local player storage in Documents/XSOLLA_gamerecap/
 DOCUMENTS_DIR = Path.home() / "Documents"
 RECAP_DIR = DOCUMENTS_DIR / "XSOLLA_gamerecap"

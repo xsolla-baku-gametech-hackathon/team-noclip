@@ -25,11 +25,12 @@ if sys.stdout and hasattr(sys.stdout, "reconfigure"):
         pass
 
 import argparse
-import webbrowser
+import threading
 import tkinter as tk
 
-from config import load_config, WEBSITE_LOGIN_URL
+from config import load_config
 import auth_state
+import sync_client
 from detector import GameDetector
 from recap_manager import RecapManager
 from banner import WatchingBanner
@@ -130,7 +131,11 @@ class XsollaGameRecapApp:
         print(f"[App] Game Exited: {game.get('name')}")
         if self.video_rec.is_recording:
             self._on_record_toggled()
-        self.recap_mgr.end_session()
+        completed_session = self.recap_mgr.end_session()
+        if completed_session and auth_state.is_logged_in():
+            threading.Thread(
+                target=sync_client.sync_session, args=(completed_session,), daemon=True
+            ).start()
 
     def _on_hotkey(self):
         """Called when Ctrl+Shift+X or Alt+X is pressed anywhere in Windows."""
@@ -166,6 +171,13 @@ class XsollaGameRecapApp:
             self.recap_mgr.add_event(f"Screenshot Saved: {result['filename']}")
             self.banner.show_capture(game_name, hint="Saved in High Quality • [F11]")
             self._refresh_media_ui()
+            if auth_state.is_logged_in():
+                session_id = self.recap_mgr.current_session.get("session_id") if self.recap_mgr.current_session else None
+                threading.Thread(
+                    target=sync_client.sync_media,
+                    args=(result["path"], "screenshot", game_name, session_id),
+                    daemon=True,
+                ).start()
 
     def _on_record_toggled(self):
         """Called when F9 or Ctrl+Shift+R is pressed, or REC button clicked."""
@@ -179,6 +191,13 @@ class XsollaGameRecapApp:
                 self.recap_mgr.add_event(f"Video Clip Saved: {result['filename']} ({result['duration_str']})")
                 self.banner.show_record_stopped(result["filename"], result["duration_str"])
                 self._refresh_media_ui()
+                if auth_state.is_logged_in():
+                    session_id = self.recap_mgr.current_session.get("session_id") if self.recap_mgr.current_session else None
+                    threading.Thread(
+                        target=sync_client.sync_media,
+                        args=(result["path"], "video", game_name, session_id, result["duration_sec"]),
+                        daemon=True,
+                    ).start()
         else:
             # Start recording
             started = self.video_rec.start_recording(game_name=game_name)
@@ -210,12 +229,17 @@ class XsollaGameRecapApp:
         self.banner.show(game_name, shortcut=self.config.get("hotkey", "Ctrl+Shift+X"))
 
     def _on_login(self):
-        """Opens the website's login page and marks this local install as
-        logged in. This is a local UI flag only — no real session/token is
-        exchanged with the website yet."""
-        webbrowser.open(WEBSITE_LOGIN_URL)
-        auth_state.log_in()
-        print("[Auth] Opened login page; marked local install as logged in.")
+        """Starts the real device-pairing flow: opens the website's login
+        page with a one-time code, then polls in the background until the
+        signed-in browser tab approves it and hands back a device token."""
+        def _on_paired(success: bool, message: str):
+            if success:
+                print("[Auth] Device paired — signed in.")
+            else:
+                print(f"[Auth] Pairing did not complete: {message}")
+
+        sync_client.pair_in_background(_on_paired)
+        print("[Auth] Opened login page; waiting for pairing approval...")
 
     def _on_logout(self):
         auth_state.log_out()

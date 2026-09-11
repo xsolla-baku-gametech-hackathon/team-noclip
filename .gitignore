@@ -15,7 +15,12 @@ software/data/sessions/*.json
 # Secrets — never commit API keys
 .env
 *.env
+.env.local
+.env.*.local
 !.env.example
+
+# Local dev-only media storage fallback (website/api/_lib/storage.js)
+website/.local-media/
 
 # IDE & OS
 .vscode/
