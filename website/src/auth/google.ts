@@ -13,6 +13,8 @@ declare global {
   }
 }
 
+export const DEFAULT_GOOGLE_CLIENT_ID = '476389939912-j9bti4788aqhd9nf8fuin8skg0d0j353.apps.googleusercontent.com';
+
 export function getGoogleClientId(): string {
   const envId = (import.meta as any).env?.VITE_GOOGLE_CLIENT_ID;
   if (envId && envId.trim()) return envId.trim();
@@ -22,7 +24,7 @@ export function getGoogleClientId(): string {
   } catch {
     // Ignore storage errors
   }
-  return '';
+  return DEFAULT_GOOGLE_CLIENT_ID;
 }
 
 export function setGoogleClientId(clientId: string) {
