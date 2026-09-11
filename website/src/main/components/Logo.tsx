@@ -1,7 +1,9 @@
+import { Link } from 'react-router-dom';
+
 const Logo = () => (
-  <a href="/" aria-label="Home">
+  <Link to="/" aria-label="Home">
     <img src="/xsolla-logo.png" alt="Xsolla" width={63} height={32} className="h-8 md:h-12 w-auto" />
-  </a>
+  </Link>
 );
 
 export default Logo;

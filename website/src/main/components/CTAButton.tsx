@@ -2,6 +2,9 @@ interface CTAButtonProps {
   label: string;
   size?: 'large' | 'small';
   className?: string;
+  disabled?: boolean;
+  ariaBusy?: boolean;
+  type?: 'button' | 'submit';
 }
 
 const ArrowIcon = ({ size }: { size: number }) => (
@@ -16,10 +19,22 @@ const ArrowIcon = ({ size }: { size: number }) => (
   </svg>
 );
 
-const CTAButton = ({ label, size = 'large', className = '' }: CTAButtonProps) => {
+const CTAButton = ({
+  label,
+  size = 'large',
+  className = '',
+  disabled = false,
+  ariaBusy = false,
+  type,
+}: CTAButtonProps) => {
   if (size === 'small') {
     return (
-      <button className={`menu-cta-btn ${className}`}>
+      <button
+        type={type}
+        disabled={disabled}
+        aria-busy={ariaBusy}
+        className={`menu-cta-btn ${disabled ? 'is-disabled' : ''} ${className}`}
+      >
         <span className="menu-cta-bg" />
         <span className="menu-cta-text">{label}</span>
         <span className="menu-cta-circle">
@@ -30,7 +45,12 @@ const CTAButton = ({ label, size = 'large', className = '' }: CTAButtonProps) =>
   }
 
   return (
-    <button className={`cta-btn ${className}`}>
+    <button
+      type={type}
+      disabled={disabled}
+      aria-busy={ariaBusy}
+      className={`cta-btn ${disabled ? 'is-disabled' : ''} ${className}`}
+    >
       <span className="cta-btn-bg" />
       <span className="cta-btn-text">{label}</span>
       <span className="cta-btn-circle">

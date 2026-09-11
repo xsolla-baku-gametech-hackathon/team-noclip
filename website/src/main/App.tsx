@@ -3,6 +3,7 @@ import Splash from './components/Splash';
 import Logo from './components/Logo';
 import BurgerMenu from './components/BurgerMenu';
 import Hero from './sections/Hero';
+import GameCarousel from './sections/GameCarousel';
 
 function MainApp() {
   return (
@@ -20,6 +21,8 @@ function MainApp() {
       <BurgerMenu />
 
       <Hero />
+
+      <GameCarousel />
     </div>
   );
 }

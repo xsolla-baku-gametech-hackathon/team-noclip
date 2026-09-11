@@ -12,7 +12,7 @@ const HEADLINE = 'I build compelling visual stories & motion that make ideas shi
 const Hero = () => (
   <main className="hero relative w-full overflow-hidden bg-studio-bg min-h-screen md:h-screen md:min-h-[800px]">
     <div className="hero-big-text creator-text-animate absolute -bottom-[30px] md:-bottom-10 left-0 right-0 z-[2] pointer-events-none w-full text-center">
-      <h2>Visuals</h2>
+      <h2>Add-on</h2>
     </div>
 
     <SpotlightReveal baseImage={BASE_IMAGE} revealImage={REVEAL_IMAGE} />
@@ -23,7 +23,7 @@ const Hero = () => (
           text={HEADLINE}
           className="hero-headline text-[22px] md:text-[28px] font-medium leading-[120%] tracking-[-0.02em] text-studio-ink max-w-[447px]"
         />
-        <CTAButton label="Start a project now" size="large" className="cta-animate" />
+        <CTAButton label="Install Xsolla Game Recap" size="large" className="cta-animate" />
       </div>
     </div>
   </main>
