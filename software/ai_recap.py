@@ -12,7 +12,7 @@ from typing import Dict, Any, List
 from config import RECAP_API_URL
 
 OPENROUTER_ENDPOINT = "https://openrouter.ai/api/v1/chat/completions"
-DEFAULT_MODEL = "openai/gpt-4o-mini"
+DEFAULT_MODEL = os.getenv("RECAP_MODEL") or os.getenv("OPENROUTER_MODEL") or "openai/gpt-4o-mini"
 OPENROUTER_KEY = os.getenv("OPENROUTER_API_KEY") or os.getenv("RECAP_API_KEY") or ""
 
 
