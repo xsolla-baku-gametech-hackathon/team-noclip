@@ -183,6 +183,8 @@ class GameBarOverlay:
             if self.btn_album and self.btn_album.winfo_exists():
                 self.btn_album.config(bg="#21262d", fg="#f0f6fc", text="📸 VISUAL MEMORIES")
             make_window_invisible_to_capture(self.window)
+            if self.visual_memories_tab:
+                self.visual_memories_tab.minimize_recordings_folder()
 
     def _on_escape(self):
         if self.visual_memories_tab and getattr(self.visual_memories_tab, "is_viewer_active", False):
@@ -190,11 +192,11 @@ class GameBarOverlay:
             return
         if self.is_album_open:
             self.toggle_album()
-        else:
-            self.close()
+            return
+        self.close()
 
     def close(self):
-        """Hides the GameBar and the dim backdrop."""
+        """Hides the GameBar and the dim backdrop, and minimizes the opened recordings folder."""
         self.is_open = False
         if self._timer_job:
             try:
@@ -202,6 +204,9 @@ class GameBarOverlay:
             except Exception:
                 pass
             self._timer_job = None
+
+        if self.visual_memories_tab:
+            self.visual_memories_tab.minimize_recordings_folder()
 
         if self.window and self.window.winfo_exists():
             try:
@@ -212,6 +217,11 @@ class GameBarOverlay:
                 pass
 
         self.hide_backdrop()
+
+    def close_recordings_folder(self):
+        """Closes ONLY the specific recordings folder opened for this button upon app quitting."""
+        if self.visual_memories_tab:
+            self.visual_memories_tab.close_recordings_folder()
 
     def hide_backdrop(self):
         """Hides the dim backdrop shadow."""

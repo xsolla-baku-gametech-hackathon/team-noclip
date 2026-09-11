@@ -205,6 +205,8 @@ class XsollaGameRecapApp:
 
     def shutdown(self):
         print("\n[App] Shutting down Xsolla Game Recap...")
+        if hasattr(self, 'gamebar') and self.gamebar:
+            self.gamebar.close_recordings_folder()
         if hasattr(self, 'video_rec') and self.video_rec.is_recording:
             self.video_rec.stop_recording()
         self.detector.stop_monitoring()

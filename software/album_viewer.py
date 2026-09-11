@@ -174,6 +174,11 @@ class VisualMemoriesTab(tk.Frame):
         self._target_scroll_y = 0.0
         self._scroll_animating = False
 
+        # Dedicated Opened File Explorer Window Tracking & Debouncing
+        self._opened_explorer_hwnd: Optional[int] = None
+        self._last_open_folder_time: float = 0.0
+        self._is_opening_folder: bool = False
+
         # In-Overlay Media Viewer & Player State
         self.is_viewer_active = False
         self.viewer_frame: Optional[tk.Frame] = None
@@ -409,17 +414,133 @@ class VisualMemoriesTab(tk.Frame):
                 pass
         self._open_recordings_folder()
 
+    def _get_all_explorer_hwnds(self) -> set:
+        """Returns the set of currently visible Explorer window HWNDs."""
+        import ctypes
+        user32 = ctypes.windll.user32
+        hwnds = set()
+
+        def enum_cb(h, lparam):
+            if user32.IsWindowVisible(h):
+                cbuf = ctypes.create_unicode_buffer(256)
+                user32.GetClassNameW(h, cbuf, 256)
+                if cbuf.value in ("CabinetWClass", "ExploreWClass"):
+                    hwnds.add(h)
+            return True
+
+        WNDENUMPROC = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_int, ctypes.c_void_p)
+        user32.EnumWindows(WNDENUMPROC(enum_cb), 0)
+        return hwnds
+
+    def _elevate_specific_explorer(self, hwnd: int):
+        """Elevates ONLY this specific Explorer window to the top of everything."""
+        import ctypes
+        user32 = ctypes.windll.user32
+        kernel32 = ctypes.windll.kernel32
+
+        if not hwnd or not user32.IsWindow(hwnd):
+            return
+
+        try:
+            user32.AllowSetForegroundWindow(-1)
+            fore_hwnd = user32.GetForegroundWindow()
+            fore_tid = user32.GetWindowThreadProcessId(fore_hwnd, None)
+            target_tid = user32.GetWindowThreadProcessId(hwnd, None)
+            app_tid = kernel32.GetCurrentThreadId()
+
+            if user32.IsIconic(hwnd):
+                user32.ShowWindow(hwnd, 9)  # SW_RESTORE
+            else:
+                user32.ShowWindow(hwnd, 5)  # SW_SHOW
+
+            if fore_tid and fore_tid != app_tid:
+                user32.AttachThreadInput(app_tid, fore_tid, True)
+            if target_tid and target_tid != app_tid:
+                user32.AttachThreadInput(app_tid, target_tid, True)
+
+            # 1. Elevate ONLY this specific Explorer window to TOP OF EVERYTHING (HWND_TOPMOST = -1)
+            user32.SetWindowPos(hwnd, -1, 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0040)
+            user32.BringWindowToTop(hwnd)
+            user32.SetForegroundWindow(hwnd)
+            try:
+                user32.SwitchToThisWindow(hwnd, True)
+            except Exception:
+                pass
+
+            # 2. Position the GameBar navbar overlay immediately BEHIND Explorer
+            w_hwnd = self.get_window_hwnd() if self.get_window_hwnd else None
+            if w_hwnd and w_hwnd != hwnd:
+                user32.SetWindowPos(w_hwnd, hwnd, 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0010)
+
+            # 3. Position the dim backdrop shadow immediately BEHIND the navbar overlay
+            b_hwnd = self.get_backdrop_hwnd() if self.get_backdrop_hwnd else None
+            if b_hwnd and b_hwnd != hwnd:
+                insert_behind = w_hwnd if (w_hwnd and w_hwnd != hwnd) else hwnd
+                user32.SetWindowPos(b_hwnd, insert_behind, 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0010)
+
+            if target_tid and target_tid != app_tid:
+                user32.AttachThreadInput(app_tid, target_tid, False)
+            if fore_tid and fore_tid != app_tid:
+                user32.AttachThreadInput(app_tid, fore_tid, False)
+        except Exception as err:
+            print(f"[Album] Error elevating specific explorer: {err}")
+
+    def minimize_recordings_folder(self):
+        """Minimizes ONLY the specific Explorer window opened for this button."""
+        if self._opened_explorer_hwnd:
+            import ctypes
+            user32 = ctypes.windll.user32
+            if user32.IsWindow(self._opened_explorer_hwnd):
+                try:
+                    user32.ShowWindow(self._opened_explorer_hwnd, 6)  # SW_MINIMIZE
+                except Exception as err:
+                    print(f"[Album] Error minimizing recordings folder: {err}")
+
+    def close_recordings_folder(self):
+        """Closes ONLY the specific Explorer window opened for this button upon quitting."""
+        if self._opened_explorer_hwnd:
+            import ctypes
+            user32 = ctypes.windll.user32
+            if user32.IsWindow(self._opened_explorer_hwnd):
+                try:
+                    user32.PostMessageW(self._opened_explorer_hwnd, 0x0010, 0, 0)  # WM_CLOSE
+                except Exception as err:
+                    print(f"[Album] Error closing recordings folder: {err}")
+            self._opened_explorer_hwnd = None
+
     def _open_recordings_folder(self):
         """
         Opens the recordings folder in Windows File Explorer and elevates it to topmost
         in the foreground WITHOUT closing, withdrawing, or lowering the navbar.
+        Ensures debouncing against accidental double/triple clicks and tracks the specific
+        Explorer window so minimization and quitting are strictly scoped to it.
         """
+        import time
+        import ctypes
+        user32 = ctypes.windll.user32
+
+        now = time.time()
+        # Debounce accidental rapid clicks (within 1.0s)
+        if getattr(self, "_is_opening_folder", False) or (now - getattr(self, "_last_open_folder_time", 0.0) < 1.0):
+            if self._opened_explorer_hwnd and user32.IsWindow(self._opened_explorer_hwnd):
+                self._elevate_specific_explorer(self._opened_explorer_hwnd)
+            return
+
+        self._last_open_folder_time = now
+
+        # If we already have a tracked window that is still open, just reuse and elevate it!
+        if self._opened_explorer_hwnd and user32.IsWindow(self._opened_explorer_hwnd):
+            self._elevate_specific_explorer(self._opened_explorer_hwnd)
+            return
+
+        # Snapshot existing explorer windows prior to launch
+        existing_hwnds = self._get_all_explorer_hwnds()
+
         ensure_data_dir()
         folder_path = str(RECORDINGS_DIR.resolve())
 
-        import ctypes
-        user32 = ctypes.windll.user32
         user32.AllowSetForegroundWindow(-1)
+        self._is_opening_folder = True
 
         try:
             subprocess.Popen(["explorer.exe", folder_path])
@@ -428,32 +549,21 @@ class VisualMemoriesTab(tk.Frame):
                 os.startfile(folder_path)
             except Exception as err:
                 print(f"[Album] Error opening recordings folder: {err}")
+                self._is_opening_folder = False
+                return
 
-        # Bring Explorer on top of everything (above the Xsolla overlay and backdrop)
-        def _bring_explorer_on_top():
+        def _locate_and_elevate(attempt=0):
             try:
                 user32.AllowSetForegroundWindow(-1)
-                WNDENUMPROC = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_int, ctypes.c_void_p)
-                target_hwnds = []
+                cur_hwnds = self._get_all_explorer_hwnds()
+                new_hwnds = cur_hwnds - existing_hwnds
 
-                def enum_cb(hwnd, lparam):
-                    if not user32.IsWindowVisible(hwnd):
-                        return True
-                    cbuf = ctypes.create_unicode_buffer(256)
-                    user32.GetClassNameW(hwnd, cbuf, 256)
-                    if cbuf.value in ("CabinetWClass", "ExploreWClass"):
-                        tbuf = ctypes.create_unicode_buffer(256)
-                        user32.GetWindowTextW(hwnd, tbuf, 256)
-                        txt = tbuf.value.lower()
-                        if "recording" in txt or "xsolla" in txt or "explorer" in txt:
-                            target_hwnds.append(hwnd)
-                    return True
+                target_hwnd = None
+                if new_hwnds:
+                    target_hwnd = list(new_hwnds)[0]
 
-                cb = WNDENUMPROC(enum_cb)
-                user32.EnumWindows(cb, 0)
-
-                # Secondary check via Shell COM if title matching didn't catch it
-                if not target_hwnds:
+                # Secondary check via Shell COM / window title if diff hasn't matched yet
+                if not target_hwnd:
                     try:
                         import win32com.client
                         shell = win32com.client.Dispatch("Shell.Application")
@@ -463,56 +573,40 @@ class VisualMemoriesTab(tk.Frame):
                             if "recording" in loc_url or "xsolla" in loc_url or "recording" in loc_name or "xsolla" in loc_name:
                                 h = getattr(w, "HWND", 0)
                                 if h and user32.IsWindowVisible(h):
-                                    target_hwnds.append(h)
+                                    target_hwnd = h
+                                    break
                     except Exception:
                         pass
 
-                fore_hwnd = user32.GetForegroundWindow()
-                fore_tid = user32.GetWindowThreadProcessId(fore_hwnd, None)
-                app_tid = ctypes.windll.kernel32.GetCurrentThreadId()
+                if not target_hwnd:
+                    def enum_cb(h, lparam):
+                        nonlocal target_hwnd
+                        if user32.IsWindowVisible(h):
+                            cbuf = ctypes.create_unicode_buffer(256)
+                            user32.GetClassNameW(h, cbuf, 256)
+                            if cbuf.value in ("CabinetWClass", "ExploreWClass"):
+                                tbuf = ctypes.create_unicode_buffer(256)
+                                user32.GetWindowTextW(h, tbuf, 256)
+                                txt = tbuf.value.lower()
+                                if "recording" in txt or "xsolla" in txt:
+                                    target_hwnd = h
+                        return True
+                    WNDENUMPROC = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_int, ctypes.c_void_p)
+                    user32.EnumWindows(WNDENUMPROC(enum_cb), 0)
 
-                w_hwnd = self.get_window_hwnd() if self.get_window_hwnd else None
-                b_hwnd = self.get_backdrop_hwnd() if self.get_backdrop_hwnd else None
-
-                for hwnd in target_hwnds:
-                    target_tid = user32.GetWindowThreadProcessId(hwnd, None)
-                    if user32.IsIconic(hwnd):
-                        user32.ShowWindow(hwnd, 9)  # SW_RESTORE
-                    else:
-                        user32.ShowWindow(hwnd, 5)  # SW_SHOW
-
-                    if fore_tid and fore_tid != app_tid:
-                        user32.AttachThreadInput(app_tid, fore_tid, True)
-                    if target_tid and target_tid != app_tid:
-                        user32.AttachThreadInput(app_tid, target_tid, True)
-
-                    # 1. Elevate Explorer window to TOP OF EVERYTHING (HWND_TOPMOST = -1)
-                    user32.SetWindowPos(hwnd, -1, 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0040)
-                    user32.BringWindowToTop(hwnd)
-                    user32.SetForegroundWindow(hwnd)
-                    try:
-                        user32.SwitchToThisWindow(hwnd, True)
-                    except Exception:
-                        pass
-
-                    # 2. Position the GameBar navbar overlay immediately BEHIND Explorer
-                    if w_hwnd and w_hwnd != hwnd:
-                        user32.SetWindowPos(w_hwnd, hwnd, 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0010)
-
-                    # 3. Position the dim backdrop shadow immediately BEHIND the navbar overlay
-                    if b_hwnd and b_hwnd != hwnd:
-                        insert_behind = w_hwnd if (w_hwnd and w_hwnd != hwnd) else hwnd
-                        user32.SetWindowPos(b_hwnd, insert_behind, 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0010)
-
-                    if target_tid and target_tid != app_tid:
-                        user32.AttachThreadInput(app_tid, target_tid, False)
-                    if fore_tid and fore_tid != app_tid:
-                        user32.AttachThreadInput(app_tid, fore_tid, False)
+                if target_hwnd and user32.IsWindow(target_hwnd):
+                    self._opened_explorer_hwnd = target_hwnd
+                    self._is_opening_folder = False
+                    self._elevate_specific_explorer(target_hwnd)
+                elif attempt < 8:
+                    self.after(150, lambda: _locate_and_elevate(attempt + 1))
+                else:
+                    self._is_opening_folder = False
             except Exception as e:
-                print(f"[Album] Exception elevating Explorer: {e}")
+                print(f"[Album] Exception locating and elevating Explorer: {e}")
+                self._is_opening_folder = False
 
-        for delay in (100, 250, 450, 750, 1200):
-            self.after(delay, _bring_explorer_on_top)
+        self.after(100, lambda: _locate_and_elevate(0))
 
     def _open_media(self, media_path: Path):
         """Opens a media file directly in-overlay (in-game photo viewer or video player)."""
