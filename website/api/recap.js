@@ -1,5 +1,5 @@
 // Vercel Serverless Function — Xsolla Game Recap Engine
-// Holds API configuration server-side only, never shipping in the client binary.
+// Powered by OpenRouter AI (gpt-4o-mini) for high-energy, context-aware gaming recaps.
 
 const RECAP_SERVICE_URL = process.env.RECAP_SERVICE_URL || 'https://openrouter.ai/api/v1/chat/completions';
 const DEFAULT_MODEL = 'openai/gpt-4o-mini';
@@ -15,22 +15,21 @@ function buildPrompt(gameName, playerName, saveData, events) {
     .join('\n') || '(no recent session events)';
 
   return [
-    `You are the official Xsolla Game Recap engine. You act as a personalized, context-aware memory bridge for a player returning to "${gameName || 'their game'}" after time away.`,
-    `Player name: ${playerName || 'Player'}`,
+    `Player: ${playerName || 'Player'}`,
+    `Game: ${gameName || 'Current Game'}`,
     '',
-    'GAME & SESSION STATE:',
+    'GAME & SESSION TELEMETRY:',
     saveSummary,
     '',
     'RECENT HIGHLIGHT EVENTS:',
     eventLines,
     '',
-    'INSTRUCTIONS:',
-    'Write a concise, high-energy gaming recap with 3 sections:',
-    '1. PREVIOUSLY ON: Exactly 2-3 engaging narrative sentences summarizing progress, storyline state, and checkpoint where the player left off.',
-    '2. WHAT YOU WERE UP TO: Exactly 3 bullet points detailing current progress, in-game achievements, and status.',
-    '3. NEXT OBJECTIVES: Exactly 3 prioritized, actionable tasks the player should tackle right now upon resuming gameplay.',
-    '',
-    'Keep it punchy, accurate to the provided data, and formatted cleanly with clear headers.'
+    'TASK:',
+    `Write an immersive, high-energy gaming recap for a player returning to ${gameName || 'their game'}.`,
+    'Return a valid JSON object with:',
+    '- "previously_on": 2-3 engaging cinematic sentences summarizing what happened and where the player is currently standing in the story/world.',
+    '- "what_you_were_up_to": An array of exactly 3 distinct accomplishment strings summarizing progress, resources, or world status.',
+    '- "next_objectives": An array of exactly 3 objects with "title" (concise string), "description" (actionable instructions), and "priority" ("HIGH", "MEDIUM", or "OPTIONAL").'
   ].join('\n');
 }
 
@@ -48,9 +47,21 @@ function generateUniversalFallback(gameName, playerName, saveData, events) {
   ];
 
   const nextObjectives = [
-    `Resume Primary Quest: Continue your main storyline objectives in ${game}.`,
-    `Inventory & Supply Check: Verify your equipment, items, and resources.`,
-    `Capture Highlights: Press F11 for instant screenshots or F9 to capture video clips.`
+    {
+      title: 'Resume Primary Quest',
+      description: `Continue your main storyline objectives in ${game}.`,
+      priority: 'HIGH'
+    },
+    {
+      title: 'Inventory & Supply Check',
+      description: 'Verify your equipment, items, and resources before moving ahead.',
+      priority: 'MEDIUM'
+    },
+    {
+      title: 'Capture Highlights',
+      description: `Press F11 for instant screenshots or F9 to capture video clips (${screenshots} saved).`,
+      priority: 'OPTIONAL'
+    }
   ];
 
   const recapText = [
@@ -61,7 +72,7 @@ function generateUniversalFallback(gameName, playerName, saveData, events) {
     ...whatYouWereUpTo.map(item => `• ${item}`),
     '',
     'NEXT OBJECTIVES:',
-    ...nextObjectives.map(item => `• ${item}`)
+    ...nextObjectives.map(o => `• ${o.title}: ${o.description}`)
   ].join('\n');
 
   return {
@@ -69,7 +80,8 @@ function generateUniversalFallback(gameName, playerName, saveData, events) {
     structured: {
       previously_on: previouslyOn,
       what_you_were_up_to: whatYouWereUpTo,
-      next_objectives: nextObjectives
+      next_objectives: nextObjectives.map(o => `${o.title}: ${o.description}`),
+      raw_objectives: nextObjectives
     }
   };
 }
@@ -108,7 +120,17 @@ export default async function handler(req, res) {
       },
       body: JSON.stringify({
         model,
-        messages: [{ role: 'user', content: buildPrompt(game_name, player_name, save_data, events) }],
+        response_format: { type: 'json_object' },
+        messages: [
+          {
+            role: 'system',
+            content: 'You are the official Xsolla Game Recap engine. Generate a cinematic, high-energy gaming recap as a valid JSON object with keys: "previously_on" (string), "what_you_were_up_to" (array of 3 strings), and "next_objectives" (array of 3 objects with "title", "description", and "priority" where priority is HIGH, MEDIUM, or OPTIONAL).'
+          },
+          {
+            role: 'user',
+            content: buildPrompt(game_name, player_name, save_data, events)
+          }
+        ],
       }),
     });
 
@@ -119,15 +141,47 @@ export default async function handler(req, res) {
     }
 
     const data = await upstream.json();
-    const recap = data?.choices?.[0]?.message?.content?.trim();
+    const rawContent = data?.choices?.[0]?.message?.content?.trim();
 
-    if (!recap) {
-      const fallback = generateUniversalFallback(game_name, player_name, save_data, events);
-      res.status(200).json(fallback);
+    let structured = null;
+    try {
+      structured = JSON.parse(rawContent);
+    } catch {
+      // Ignore JSON parse error and fallback
+    }
+
+    if (structured && structured.previously_on) {
+      const objs = structured.next_objectives || [];
+      const formattedObjectives = objs.map(o => {
+        if (typeof o === 'string') return o;
+        return `${o.title || 'Objective'}: ${o.description || ''}`;
+      });
+
+      const recapText = [
+        `PREVIOUSLY ON ${(game_name || 'YOUR GAME').toUpperCase()}:`,
+        structured.previously_on,
+        '',
+        'WHAT YOU WERE UP TO:',
+        ...(structured.what_you_were_up_to || []).map(item => `• ${item}`),
+        '',
+        'NEXT OBJECTIVES:',
+        ...formattedObjectives.map(item => `• ${item}`)
+      ].join('\n');
+
+      res.status(200).json({
+        recap: recapText,
+        structured: {
+          previously_on: structured.previously_on,
+          what_you_were_up_to: structured.what_you_were_up_to || [],
+          next_objectives: formattedObjectives,
+          raw_objectives: objs
+        }
+      });
       return;
     }
 
-    res.status(200).json({ recap });
+    const fallback = generateUniversalFallback(game_name, player_name, save_data, events);
+    res.status(200).json(fallback);
   } catch (err) {
     const fallback = generateUniversalFallback(game_name, player_name, save_data, events);
     res.status(200).json(fallback);
