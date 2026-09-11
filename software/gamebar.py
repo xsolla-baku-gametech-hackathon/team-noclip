@@ -246,9 +246,7 @@ class GameBarOverlay:
         return None
 
     def _on_open_folder_requested(self):
-        """Elevates the recordings folder in front of the shadow without removing the shadow."""
-        if self.window and self.window.winfo_exists():
-            self.window.lift()
+        """Elevates the recordings folder on top of everything without removing the shadow."""
         if self.visual_memories_tab:
             self.visual_memories_tab._open_recordings_folder()
 

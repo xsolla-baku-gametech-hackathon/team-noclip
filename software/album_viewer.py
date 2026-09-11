@@ -429,7 +429,7 @@ class VisualMemoriesTab(tk.Frame):
             except Exception as err:
                 print(f"[Album] Error opening recordings folder: {err}")
 
-        # Bring Explorer on top of everything without lowering the navbar
+        # Bring Explorer on top of everything (above the Xsolla overlay and backdrop)
         def _bring_explorer_on_top():
             try:
                 user32.AllowSetForegroundWindow(-1)
@@ -445,18 +445,37 @@ class VisualMemoriesTab(tk.Frame):
                         tbuf = ctypes.create_unicode_buffer(256)
                         user32.GetWindowTextW(hwnd, tbuf, 256)
                         txt = tbuf.value.lower()
-                        if "recording" in txt or "xsolla" in txt:
+                        if "recording" in txt or "xsolla" in txt or "explorer" in txt:
                             target_hwnds.append(hwnd)
                     return True
 
                 cb = WNDENUMPROC(enum_cb)
                 user32.EnumWindows(cb, 0)
 
+                # Secondary check via Shell COM if title matching didn't catch it
+                if not target_hwnds:
+                    try:
+                        import win32com.client
+                        shell = win32com.client.Dispatch("Shell.Application")
+                        for w in shell.Windows():
+                            loc_url = str(getattr(w, "LocationURL", "")).lower()
+                            loc_name = str(getattr(w, "LocationName", "")).lower()
+                            if "recording" in loc_url or "xsolla" in loc_url or "recording" in loc_name or "xsolla" in loc_name:
+                                h = getattr(w, "HWND", 0)
+                                if h and user32.IsWindowVisible(h):
+                                    target_hwnds.append(h)
+                    except Exception:
+                        pass
+
                 fore_hwnd = user32.GetForegroundWindow()
                 fore_tid = user32.GetWindowThreadProcessId(fore_hwnd, None)
                 app_tid = ctypes.windll.kernel32.GetCurrentThreadId()
 
+                w_hwnd = self.get_window_hwnd() if self.get_window_hwnd else None
+                b_hwnd = self.get_backdrop_hwnd() if self.get_backdrop_hwnd else None
+
                 for hwnd in target_hwnds:
+                    target_tid = user32.GetWindowThreadProcessId(hwnd, None)
                     if user32.IsIconic(hwnd):
                         user32.ShowWindow(hwnd, 9)  # SW_RESTORE
                     else:
@@ -464,29 +483,35 @@ class VisualMemoriesTab(tk.Frame):
 
                     if fore_tid and fore_tid != app_tid:
                         user32.AttachThreadInput(app_tid, fore_tid, True)
-                        user32.BringWindowToTop(hwnd)
-                        user32.SetForegroundWindow(hwnd)
-                        user32.AttachThreadInput(app_tid, fore_tid, False)
-                    else:
-                        user32.BringWindowToTop(hwnd)
-                        user32.SetForegroundWindow(hwnd)
+                    if target_tid and target_tid != app_tid:
+                        user32.AttachThreadInput(app_tid, target_tid, True)
 
-                    # 1. Elevate Explorer window to topmost
+                    # 1. Elevate Explorer window to TOP OF EVERYTHING (HWND_TOPMOST = -1)
                     user32.SetWindowPos(hwnd, -1, 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0040)
+                    user32.BringWindowToTop(hwnd)
+                    user32.SetForegroundWindow(hwnd)
+                    try:
+                        user32.SwitchToThisWindow(hwnd, True)
+                    except Exception:
+                        pass
 
-                    # 2. Position the dim backdrop shadow immediately BEHIND Explorer (z-order)
-                    b_hwnd = self.get_backdrop_hwnd() if self.get_backdrop_hwnd else None
-                    if b_hwnd:
-                        user32.SetWindowPos(b_hwnd, hwnd, 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0010)
+                    # 2. Position the GameBar navbar overlay immediately BEHIND Explorer
+                    if w_hwnd and w_hwnd != hwnd:
+                        user32.SetWindowPos(w_hwnd, hwnd, 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0010)
 
-                    # 3. Position the GameBar navbar in front of Explorer
-                    w_hwnd = self.get_window_hwnd() if self.get_window_hwnd else None
-                    if w_hwnd:
-                        user32.SetWindowPos(w_hwnd, -1, 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0010)
+                    # 3. Position the dim backdrop shadow immediately BEHIND the navbar overlay
+                    if b_hwnd and b_hwnd != hwnd:
+                        insert_behind = w_hwnd if (w_hwnd and w_hwnd != hwnd) else hwnd
+                        user32.SetWindowPos(b_hwnd, insert_behind, 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0010)
+
+                    if target_tid and target_tid != app_tid:
+                        user32.AttachThreadInput(app_tid, target_tid, False)
+                    if fore_tid and fore_tid != app_tid:
+                        user32.AttachThreadInput(app_tid, fore_tid, False)
             except Exception as e:
                 print(f"[Album] Exception elevating Explorer: {e}")
 
-        for delay in (150, 350, 700, 1200):
+        for delay in (100, 250, 450, 750, 1200):
             self.after(delay, _bring_explorer_on_top)
 
     def _open_media(self, media_path: Path):
