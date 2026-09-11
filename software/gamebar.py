@@ -10,12 +10,18 @@ import tkinter as tk
 from PIL import Image, ImageTk
 from typing import Optional, Callable
 
-from config import ASSETS_DIR, make_window_invisible_to_capture
+from config import (
+    ASSETS_DIR,
+    make_window_invisible_to_capture,
+    make_window_visible_to_capture,
+    load_config
+)
 from detector import GameDetector
 from recap_manager import RecapManager
 from polaroid_service import PolaroidService
 from album_viewer import VisualMemoriesTab
 from recap_panel import GameRecapTab
+from settings_panel import SettingsTab
 import auth_state
 
 
@@ -53,6 +59,7 @@ class GameBarOverlay:
         self.btn_snap = None
         self.btn_album = None
         self.btn_recap = None
+        self.btn_settings = None
         self.btn_login_badge = None
         self.rec_badge = None
         self.btn_pause = None
@@ -65,14 +72,34 @@ class GameBarOverlay:
         self.tab_container = None
         self.visual_memories_tab: Optional[VisualMemoriesTab] = None
         self.recap_tab: Optional[GameRecapTab] = None
+        self.settings_tab: Optional[SettingsTab] = None
 
         self.is_open = False
         self.is_album_open = False
         self.is_recap_open = False
+        self.is_settings_open = False
         self._timer_job = None
         self._logo_photo = None
         self._drag_start_x = 0
         self._drag_start_y = 0
+
+    def _apply_capture_affinity(self):
+        """Applies capture visibility: includes or excludes GameBar from recording based on settings."""
+        try:
+            cfg = load_config()
+            include_gb = bool(cfg.get("include_gamebar_in_recording", True))
+            if self.window and self.window.winfo_exists():
+                if include_gb:
+                    make_window_visible_to_capture(self.window)
+                else:
+                    make_window_invisible_to_capture(self.window)
+            if self.profile_popup and self.profile_popup.winfo_exists():
+                if include_gb:
+                    make_window_visible_to_capture(self.profile_popup)
+                else:
+                    make_window_invisible_to_capture(self.profile_popup)
+        except Exception:
+            pass
 
     def toggle(self):
         """Toggles the GameBar visibility."""
@@ -143,7 +170,7 @@ class GameBarOverlay:
                 self.toggle_album()
             elif show_recap and not self.is_recap_open:
                 self.toggle_recap()
-            make_window_invisible_to_capture(self.window)
+            self._apply_capture_affinity()
             return
 
         self.window = tk.Toplevel(self.master)
@@ -179,7 +206,7 @@ class GameBarOverlay:
             self.backdrop.lift()
         self.window.lift()
         self.window.focus_force()
-        make_window_invisible_to_capture(self.window)
+        self._apply_capture_affinity()
 
     def toggle_album(self):
         """Toggles the Visual Memories tab inside the GameBar navbar."""
@@ -200,6 +227,14 @@ class GameBarOverlay:
             if self.btn_recap and self.btn_recap.winfo_exists():
                 self.btn_recap.config(bg="#1f293d", fg="#70e1ff", text="✨ GAME RECAP BY XSOLLA")
 
+        # Close settings tab if open
+        if self.is_settings_open:
+            self.is_settings_open = False
+            if self.settings_tab:
+                self.settings_tab.pack_forget()
+            if self.btn_settings and self.btn_settings.winfo_exists():
+                self.btn_settings.config(bg="#21262d", fg="#f0f6fc", text="⚙️ SETTINGS")
+
         self.is_album_open = not self.is_album_open
         cur_x = self.window.winfo_x()
         cur_y = self.window.winfo_y()
@@ -215,7 +250,7 @@ class GameBarOverlay:
             self.window.geometry(f"1120x660+{cur_x}+{cur_y}")
             if self.btn_album and self.btn_album.winfo_exists():
                 self.btn_album.config(bg="#70e1ff", fg="#0d1117", text="📸 VISUAL MEMORIES ▾")
-            make_window_invisible_to_capture(self.window)
+            self._apply_capture_affinity()
         else:
             if self.visual_memories_tab:
                 self.visual_memories_tab.pack_forget()
@@ -226,7 +261,7 @@ class GameBarOverlay:
             self.window.geometry(f"1120x56+{cur_x}+{cur_y}")
             if self.btn_album and self.btn_album.winfo_exists():
                 self.btn_album.config(bg="#21262d", fg="#f0f6fc", text="📸 VISUAL MEMORIES")
-            make_window_invisible_to_capture(self.window)
+            self._apply_capture_affinity()
             if self.visual_memories_tab:
                 self.visual_memories_tab.minimize_recordings_folder()
 
@@ -249,6 +284,14 @@ class GameBarOverlay:
             if self.btn_album and self.btn_album.winfo_exists():
                 self.btn_album.config(bg="#21262d", fg="#f0f6fc", text="📸 VISUAL MEMORIES")
 
+        # Close settings tab if open
+        if self.is_settings_open:
+            self.is_settings_open = False
+            if self.settings_tab:
+                self.settings_tab.pack_forget()
+            if self.btn_settings and self.btn_settings.winfo_exists():
+                self.btn_settings.config(bg="#21262d", fg="#f0f6fc", text="⚙️ SETTINGS")
+
         self.is_recap_open = not self.is_recap_open
         cur_x = self.window.winfo_x()
         cur_y = self.window.winfo_y()
@@ -264,7 +307,7 @@ class GameBarOverlay:
             self.window.geometry(f"1120x660+{cur_x}+{cur_y}")
             if self.btn_recap and self.btn_recap.winfo_exists():
                 self.btn_recap.config(bg="#70e1ff", fg="#0d1117", text="✨ GAME RECAP ▾")
-            make_window_invisible_to_capture(self.window)
+            self._apply_capture_affinity()
         else:
             if self.recap_tab:
                 self.recap_tab.pack_forget()
@@ -275,7 +318,58 @@ class GameBarOverlay:
             self.window.geometry(f"1120x56+{cur_x}+{cur_y}")
             if self.btn_recap and self.btn_recap.winfo_exists():
                 self.btn_recap.config(bg="#1f293d", fg="#70e1ff", text="✨ GAME RECAP BY XSOLLA")
-            make_window_invisible_to_capture(self.window)
+            self._apply_capture_affinity()
+
+    def toggle_settings(self):
+        """Toggles the Settings & FPS panel inside the GameBar navbar."""
+        if not self.window or not self.window.winfo_exists():
+            self.open()
+            self.master.after(100, self.toggle_settings)
+            return
+
+        # Close album tab if open
+        if self.is_album_open:
+            self.is_album_open = False
+            if self.visual_memories_tab:
+                self.visual_memories_tab.pack_forget()
+            if self.btn_album and self.btn_album.winfo_exists():
+                self.btn_album.config(bg="#21262d", fg="#f0f6fc", text="📸 VISUAL MEMORIES")
+
+        # Close recap tab if open
+        if self.is_recap_open:
+            self.is_recap_open = False
+            if self.recap_tab:
+                self.recap_tab.pack_forget()
+            if self.btn_recap and self.btn_recap.winfo_exists():
+                self.btn_recap.config(bg="#1f293d", fg="#70e1ff", text="✨ GAME RECAP BY XSOLLA")
+
+        self.is_settings_open = not self.is_settings_open
+        cur_x = self.window.winfo_x()
+        cur_y = self.window.winfo_y()
+
+        if self.is_settings_open:
+            if self.tab_divider:
+                self.tab_divider.pack(fill="x", side="top")
+            if self.tab_container:
+                self.tab_container.pack(fill="both", expand=True, side="top")
+            if self.settings_tab:
+                self.settings_tab.pack(fill="both", expand=True)
+                self.settings_tab.refresh()
+            self.window.geometry(f"1120x660+{cur_x}+{cur_y}")
+            if self.btn_settings and self.btn_settings.winfo_exists():
+                self.btn_settings.config(bg="#70e1ff", fg="#0d1117", text="⚙️ SETTINGS ▾")
+            self._apply_capture_affinity()
+        else:
+            if self.settings_tab:
+                self.settings_tab.pack_forget()
+            if self.tab_divider:
+                self.tab_divider.pack_forget()
+            if self.tab_container:
+                self.tab_container.pack_forget()
+            self.window.geometry(f"1120x56+{cur_x}+{cur_y}")
+            if self.btn_settings and self.btn_settings.winfo_exists():
+                self.btn_settings.config(bg="#21262d", fg="#f0f6fc", text="⚙️ SETTINGS")
+            self._apply_capture_affinity()
 
     def open_recap(self):
         """Opens or expands the Game Recap panel immediately."""
@@ -537,6 +631,9 @@ class GameBarOverlay:
         if self.visual_memories_tab and getattr(self.visual_memories_tab, "is_viewer_active", False):
             self.visual_memories_tab.close_viewer()
             return
+        if self.is_settings_open:
+            self.toggle_settings()
+            return
         if self.is_recap_open:
             self.toggle_recap()
             return
@@ -561,6 +658,8 @@ class GameBarOverlay:
 
         if self.window and self.window.winfo_exists():
             try:
+                if self.is_settings_open:
+                    self.toggle_settings()
                 if self.is_recap_open:
                     self.toggle_recap()
                 if self.is_album_open:
@@ -824,11 +923,27 @@ class GameBarOverlay:
         self.btn_stop.bind("<Enter>", lambda e: self.btn_stop.config(bg="#b62324"))
         self.btn_stop.bind("<Leave>", lambda e: self.btn_stop.config(bg="#da3633"))
 
+        # Settings button
+        self.btn_settings = tk.Label(
+            action_frame,
+            text="⚙️ SETTINGS",
+            font=("Segoe UI", 8, "bold"),
+            fg="#f0f6fc",
+            bg="#21262d",
+            cursor="hand2",
+            padx=9,
+            pady=4
+        )
+        self.btn_settings.bind("<Button-1>", lambda e: self.toggle_settings())
+        self.btn_settings.bind("<Enter>", lambda e: self.btn_settings.config(bg="#70e1ff", fg="#0d1117") if not self.is_settings_open else None)
+        self.btn_settings.bind("<Leave>", lambda e: self.btn_settings.config(bg="#21262d", fg="#f0f6fc") if not self.is_settings_open else None)
+
         # Initial layout: standard buttons shown
         self.btn_snap.pack(side="left", pady=12, padx=2)
         self.btn_rec.pack(side="left", pady=12, padx=2)
         self.btn_album.pack(side="left", pady=12, padx=2)
         self.btn_recap.pack(side="left", pady=12, padx=2)
+        self.btn_settings.pack(side="left", pady=12, padx=2)
         self.btn_login_badge.pack(side="left", pady=12, padx=2)
 
         # 8. Integrated Tab Panels Container (Expands directly below navbar)
@@ -853,6 +968,13 @@ class GameBarOverlay:
             on_close_tab=self.toggle_recap,
             on_login_request=self.on_login_request,
             get_active_game=lambda: self.detector.active_game,
+            on_toast=self.show_toast
+        )
+
+        self.settings_tab = SettingsTab(
+            self.tab_container,
+            on_close_tab=self.toggle_settings,
+            on_settings_changed=lambda s: self._apply_capture_affinity(),
             on_toast=self.show_toast
         )
 

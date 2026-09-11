@@ -48,6 +48,9 @@ RECORDINGS_DIR = RECAP_DIR / "recordings"  # Dedicated recordings & captures fol
 SCREENSHOTS_DIR = RECORDINGS_DIR           # Unified under recordings directory
 CONFIG_FILE = RECAP_DIR / "config.json"
 
+# Cloud Settings endpoint (can sync between desktop app & website dashboard)
+SETTINGS_API_URL = os.getenv("SETTINGS_API_URL", "https://team-noclip.vercel.app/api/settings")
+
 DEFAULT_CONFIG = {
     "app_name": "Xsolla Game Recap",
     "version": "1.3.0",
@@ -59,6 +62,9 @@ DEFAULT_CONFIG = {
     "enable_toast_sound": True,
     "scan_interval_sec": 1.0,
     "smart_heuristic_detection": True,
+    "recording_fps": 30,
+    "video_format": "mp4",
+    "include_gamebar_in_recording": True,
     "custom_apps": []
 }
 
@@ -107,6 +113,62 @@ def save_config(config_dict: dict):
         print(f"[Config] Save error: {err}")
 
 
+def get_recording_settings() -> dict:
+    """Returns the current video recording and capture configuration."""
+    cfg = load_config()
+    return {
+        "recording_fps": int(cfg.get("recording_fps", 30)),
+        "video_format": str(cfg.get("video_format", "mp4")).lower(),
+        "include_gamebar_in_recording": bool(cfg.get("include_gamebar_in_recording", True))
+    }
+
+
+def update_recording_settings(settings: dict) -> dict:
+    """Updates and saves recording settings."""
+    cfg = load_config()
+    if "recording_fps" in settings:
+        try:
+            cfg["recording_fps"] = max(10, min(120, int(settings["recording_fps"])))
+        except (ValueError, TypeError):
+            pass
+    if "video_format" in settings:
+        fmt = str(settings["video_format"]).lower().strip()
+        if fmt in ("mp4", "avi", "mkv"):
+            cfg["video_format"] = fmt
+    if "include_gamebar_in_recording" in settings:
+        cfg["include_gamebar_in_recording"] = bool(settings["include_gamebar_in_recording"])
+    save_config(cfg)
+    return get_recording_settings()
+
+
+def sync_settings_with_cloud(user_token: str = "") -> dict:
+    """
+    Syncs recording settings with the website dashboard API endpoint.
+    Sends local settings and receives updated cloud settings.
+    """
+    import requests
+    local_settings = get_recording_settings()
+    try:
+        headers = {"Content-Type": "application/json"}
+        if user_token:
+            headers["Authorization"] = f"Bearer {user_token}"
+
+        resp = requests.post(
+            SETTINGS_API_URL,
+            json={"settings": local_settings},
+            headers=headers,
+            timeout=5
+        )
+        if resp.status_code == 200:
+            data = resp.json()
+            cloud_settings = data.get("settings", {})
+            if cloud_settings:
+                return update_recording_settings(cloud_settings)
+    except Exception as err:
+        print(f"[SettingsSync] Cloud sync skipped/offline: {err}")
+    return local_settings
+
+
 def register_custom_app(name: str, executable: str):
     cfg = load_config()
     clean_exe = executable.strip().lower()
@@ -124,12 +186,12 @@ def register_custom_app(name: str, executable: str):
     save_config(cfg)
 
 
-def make_window_invisible_to_capture(window) -> bool:
+def set_window_capture_affinity(window, exclude_from_capture: bool = True) -> bool:
     """
-    Excludes the given Tkinter window from all screen captures, screenshots,
-    and video recording using the Windows DWM SetWindowDisplayAffinity API.
-    The window remains 100% visible and interactive for the player in real-time,
-    but is completely invisible in captured PNGs, MP4 clips, and screen shares.
+    Controls whether a window is excluded from screen recordings and screenshots.
+    - If exclude_from_capture is True: sets WDA_EXCLUDEFROMCAPTURE (0x00000011).
+    - If exclude_from_capture is False: sets WDA_NONE (0x00000000), allowing the window
+      to be captured in recordings and screenshots.
     """
     try:
         import ctypes
@@ -138,11 +200,22 @@ def make_window_invisible_to_capture(window) -> bool:
         parent = ctypes.windll.user32.GetParent(hwnd)
         target_hwnd = parent if parent else hwnd
 
-        WDA_EXCLUDEFROMCAPTURE = 0x00000011  # 17 (Windows 10 2004+ / Windows 11)
-        res = ctypes.windll.user32.SetWindowDisplayAffinity(target_hwnd, WDA_EXCLUDEFROMCAPTURE)
+        affinity = 0x00000011 if exclude_from_capture else 0x00000000
+        res = ctypes.windll.user32.SetWindowDisplayAffinity(target_hwnd, affinity)
         if not res and hwnd != target_hwnd:
-            res = ctypes.windll.user32.SetWindowDisplayAffinity(hwnd, WDA_EXCLUDEFROMCAPTURE)
+            res = ctypes.windll.user32.SetWindowDisplayAffinity(hwnd, affinity)
         return bool(res)
     except Exception as err:
-        print(f"[WindowAffinity] Error excluding window from capture: {err}")
+        print(f"[WindowAffinity] Error setting capture affinity: {err}")
         return False
+
+
+def make_window_invisible_to_capture(window) -> bool:
+    """Excludes window from screen capture/recording."""
+    return set_window_capture_affinity(window, exclude_from_capture=True)
+
+
+def make_window_visible_to_capture(window) -> bool:
+    """Includes window in screen capture/recording."""
+    return set_window_capture_affinity(window, exclude_from_capture=False)
+

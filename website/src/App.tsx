@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import MainApp from './main/App';
 import LoginPage from './main/pages/LoginPage';
 import SharePage from './main/pages/SharePage';
@@ -10,6 +10,7 @@ import GameDetail from './app/pages/GameDetail';
 import Recaps from './app/pages/Recaps';
 import Media from './app/pages/Media';
 import CloudSharing from './app/pages/CloudSharing';
+import Settings from './app/pages/Settings';
 
 function App() {
   return (
@@ -17,6 +18,8 @@ function App() {
       <Routes>
         <Route path="/" element={<MainApp />} />
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/dashboard" element={<Navigate to="/app" replace />} />
+        <Route path="/settings" element={<Navigate to="/app/settings" replace />} />
         <Route path="/share/:shareId" element={<SharePage />} />
         <Route path="/app" element={<RequireAuth>{(user) => <AppShell user={user} />}</RequireAuth>}>
           <Route index element={<Overview />} />
@@ -25,6 +28,7 @@ function App() {
           <Route path="recaps" element={<Recaps />} />
           <Route path="media" element={<Media />} />
           <Route path="sharing" element={<CloudSharing />} />
+          <Route path="settings" element={<Settings />} />
         </Route>
       </Routes>
     </BrowserRouter>

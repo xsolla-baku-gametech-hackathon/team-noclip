@@ -23,22 +23,29 @@ def get_user_label() -> str:
 
 
 def get_device_token() -> str:
-    return load_config().get("device_token", "")
+    return load_config().get("device_token", "") or load_config().get("auth_token", "")
+
+
+def get_auth_token() -> str:
+    return get_device_token()
 
 
 def set_device_token(token: str):
     cfg = load_config()
     cfg["device_token"] = token
+    cfg["auth_token"] = token
     save_config(cfg)
 
 
 def get_current_user() -> Dict[str, str]:
     cfg = load_config()
+    token = cfg.get("device_token", "") or cfg.get("auth_token", "")
     return {
         "logged_in": bool(cfg.get("logged_in", False)),
         "user_label": cfg.get("user_label", "Player"),
         "user_email": cfg.get("user_email", ""),
-        "device_token": cfg.get("device_token", ""),
+        "device_token": token,
+        "auth_token": token,
         "login_time": cfg.get("login_time", ""),
     }
 
@@ -53,6 +60,7 @@ def log_in(user_label: str = "Player", email: str = "", token: str = ""):
     cfg["user_label"] = user_label or "Player"
     cfg["user_email"] = email
     cfg["device_token"] = token
+    cfg["auth_token"] = token
     cfg["login_time"] = time.strftime("%Y-%m-%d %H:%M:%S")
     save_config(cfg)
 
