@@ -94,6 +94,18 @@ class TestRecapIntegration(unittest.TestCase):
 
         server.stop()
 
+    def test_login_window_creation(self):
+        import tkinter as tk
+        from login_window import LoginWindow
+        root = tk.Tk()
+        root.withdraw()
+        lw = LoginWindow(root, on_login_success=lambda t, u, e: None)
+        lw.show()
+        self.assertTrue(lw.window.winfo_exists())
+        self.assertEqual(lw.window.cget("bg"), "#080b10")
+        lw.destroy()
+        root.destroy()
+
 
 if __name__ == "__main__":
     unittest.main()
