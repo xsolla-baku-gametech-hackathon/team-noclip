@@ -217,7 +217,7 @@ class VisualMemoriesTab(tk.Frame):
 
         self.subtitle_lbl = tk.Label(
             title_box,
-            text="⚡ In-Overlay Media Vault • Click any capture to view or play",
+            text="⚡ Visual Memories & Highlights • Click any capture to view or play",
             font=("Segoe UI", 8),
             fg="#8b949e",
             bg="#0d111a"
@@ -267,20 +267,9 @@ class VisualMemoriesTab(tk.Frame):
         self.btn_filter_videos.pack(side="left")
         self.btn_filter_videos.bind("<Button-1>", lambda e: self._set_filter("VIDEOS"))
 
-        # Right: Utility Actions (In-Game Media Vault Badge, Refresh, Close Tab)
+        # Right: Utility Actions (Refresh, Close Tab)
         btn_box = tk.Frame(header, bg="#0d111a")
         btn_box.pack(side="right")
-
-        badge_vault = tk.Label(
-            btn_box,
-            text="⚡ IN-GAME VIEWER",
-            font=("Segoe UI", 8, "bold"),
-            bg="#141c2b",
-            fg="#70e1ff",
-            padx=8,
-            pady=4
-        )
-        badge_vault.pack(side="left", padx=4)
 
         btn_refresh = tk.Button(
             btn_box,

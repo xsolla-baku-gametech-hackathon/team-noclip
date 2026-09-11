@@ -11,6 +11,98 @@ ASSETS_DIR = Path(__file__).resolve().parent / "assets"
 ASSETS_DIR.mkdir(parents=True, exist_ok=True)
 
 
+import struct
+import io
+
+
+def make_windows_ico(src_image: Image.Image, out_path: Path):
+    """Encodes a multi-resolution Windows ICO with standard 32-bit DIB entries and 256px PNG."""
+    sizes = [16, 24, 32, 48, 64, 128, 256]
+    entries = []
+    data_blobs = []
+
+    for s in sizes:
+        resized = src_image.resize((s, s), Image.Resampling.LANCZOS).convert('RGBA')
+        if s == 256:
+            buf = io.BytesIO()
+            resized.save(buf, format='PNG')
+            blob = buf.getvalue()
+        else:
+            w, h = s, s
+            header = struct.pack(
+                '<IIIHHIIIIII',
+                40,           # biSize
+                w,            # biWidth
+                h * 2,        # biHeight (XOR mask + AND mask)
+                1,            # biPlanes
+                32,           # biBitCount
+                0,            # biCompression (BI_RGB)
+                w * h * 4,    # biSizeImage
+                0, 0, 0, 0    # resolution & colors
+            )
+            pixels = []
+            for y in range(h - 1, -1, -1):
+                for x in range(w):
+                    r, g, b, a = resized.getpixel((x, y))
+                    pixels.append(struct.pack('BBBB', b, g, r, a))
+            xor_mask = b''.join(pixels)
+
+            and_bytes = []
+            row_bytes_len = (w + 31) // 32 * 4
+            for y in range(h - 1, -1, -1):
+                row_bits = 0
+                for x in range(w):
+                    a = resized.getpixel((x, y))[3]
+                    if a < 128:
+                        row_bits |= (1 << (7 - (x % 8)))
+                    if (x % 8 == 7) or (x == w - 1):
+                        and_bytes.append(struct.pack('B', row_bits))
+                        row_bits = 0
+                cur_len = len(and_bytes) % row_bytes_len
+                if cur_len != 0:
+                    and_bytes.append(b'\x00' * (row_bytes_len - cur_len))
+            and_mask = b''.join(and_bytes)
+            blob = header + xor_mask + and_mask
+
+        data_blobs.append(blob)
+        b_w = 0 if s == 256 else s
+        b_h = 0 if s == 256 else s
+        entries.append({
+            'width': b_w,
+            'height': b_h,
+            'color_count': 0,
+            'reserved': 0,
+            'planes': 1,
+            'bit_count': 32,
+            'size': len(blob)
+        })
+
+    icondir = struct.pack('<HHH', 0, 1, len(sizes))
+    offset = 6 + len(sizes) * 16
+    direntries = []
+    for entry in entries:
+        direntries.append(struct.pack(
+            '<BBBBHHII',
+            entry['width'],
+            entry['height'],
+            entry['color_count'],
+            entry['reserved'],
+            entry['planes'],
+            entry['bit_count'],
+            entry['size'],
+            offset
+        ))
+        offset += entry['size']
+
+    with open(str(out_path), 'wb') as f:
+        f.write(icondir)
+        for de in direntries:
+            f.write(de)
+        for blob in data_blobs:
+            f.write(blob)
+    print(f"[Assets] Created standard multi-size Windows robot icon: {out_path} ({offset} bytes)")
+
+
 def create_xsolla_icon():
     """Generates official-grade robot mascot assets and multi-size Windows .ico."""
     trans_path = ASSETS_DIR / "xsolla_transparent.png"
@@ -50,11 +142,9 @@ def create_xsolla_icon():
         robot_256.save(str(emblem_path), "PNG")
         print(f"[Assets] Created clean robot mascot PNGs: {clean_path}")
 
-        # Save Multi-Resolution Windows ICO from the robot mascot
+        # Save Standard Multi-Resolution Windows ICO from the robot mascot
         ico_path = ASSETS_DIR / "xsolla_icon.ico"
-        sizes = [(16, 16), (24, 24), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)]
-        robot_256.save(str(ico_path), format="ICO", sizes=sizes)
-        print(f"[Assets] Created multi-size Windows robot icon: {ico_path}")
+        make_windows_ico(robot_img, ico_path)
         return
 
     # Fallback if transparent source is missing
@@ -66,7 +156,7 @@ def create_xsolla_icon():
     png_path = ASSETS_DIR / "xsolla_mascot_clean.png"
     img.save(str(png_path), "PNG")
     ico_path = ASSETS_DIR / "xsolla_icon.ico"
-    img.save(str(ico_path), format="ICO", sizes=[(64, 64), (128, 128), (256, 256)])
+    make_windows_ico(img, ico_path)
     print(f"[Assets] Created fallback icon: {ico_path}")
 
 
