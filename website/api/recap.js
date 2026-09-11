@@ -1,8 +1,8 @@
 // Vercel Serverless Function — Xsolla Game Recap Engine
-// Holds API configuration server-side only, never shipping in the client binary.
-// Real generation only — no fallback text pretending to know what the player
-// did when the AI service isn't configured or fails. See ai_recap.py for how
-// the desktop app is expected to handle an error response from this route.
+// Powered by OpenRouter AI (gpt-4o-mini) for high-energy, context-aware
+// gaming recaps. Real generation only — no fallback text pretending to know
+// what the player did when the AI service isn't configured or fails. See
+// ai_recap.py for how the desktop app handles an error response from this route.
 
 const RECAP_SERVICE_URL = process.env.RECAP_SERVICE_URL || 'https://openrouter.ai/api/v1/chat/completions';
 const DEFAULT_MODEL = 'openai/gpt-4o-mini';
@@ -18,33 +18,38 @@ function buildPrompt(gameName, playerName, saveData, events) {
     .join('\n') || '(no recent session events)';
 
   return [
-    `You are the official Xsolla Game Recap engine. You act as a personalized, context-aware memory bridge for a player returning to "${gameName || 'their game'}" after time away.`,
-    `Player name: ${playerName || 'Player'}`,
+    `Player: ${playerName || 'Player'}`,
+    `Game: ${gameName || 'Current Game'}`,
     '',
-    'GAME & SESSION STATE:',
+    'GAME & SESSION TELEMETRY:',
     saveSummary,
     '',
     'RECENT HIGHLIGHT EVENTS:',
     eventLines,
     '',
-    'INSTRUCTIONS:',
-    'Base everything only on the state and events above — never invent progress, items, or story beats they do not imply.',
-    'Respond with ONLY a JSON object (no markdown, no code fences) matching exactly:',
-    '{"previously_on": string, "what_you_were_up_to": string[], "next_objectives": string[]}',
-    '- previously_on: 2-3 engaging narrative sentences, written like a recap narrator.',
-    '- what_you_were_up_to: up to 3 short bullet points on current progress/status.',
-    '- next_objectives: up to 3 short, prioritized, actionable next steps.',
-    'If the data is too sparse for a field, say so honestly in 1 short sentence rather than fabricating specifics.',
+    'TASK:',
+    `Write an immersive, high-energy gaming recap for a player returning to ${gameName || 'their game'}.`,
+    'Base everything only on the telemetry and events above — never invent progress, items, or story beats they do not imply.',
+    'Return a valid JSON object with:',
+    '- "previously_on": 2-3 engaging cinematic sentences summarizing what happened and where the player is currently standing in the story/world.',
+    '- "what_you_were_up_to": An array of up to 3 distinct accomplishment strings summarizing progress, resources, or world status.',
+    '- "next_objectives": An array of up to 3 objects with "title" (concise string), "description" (actionable instructions), and "priority" ("HIGH", "MEDIUM", or "OPTIONAL").',
+    'If the data is too sparse for a field, say so honestly and briefly rather than fabricating specifics.',
   ].join('\n');
 }
 
 function parseStructuredRecap(raw) {
   const cleaned = raw.trim().replace(/^```(?:json)?/i, '').replace(/```$/, '').trim();
   const parsed = JSON.parse(cleaned);
+  const objectives = Array.isArray(parsed.next_objectives) ? parsed.next_objectives : [];
+
   return {
     previously_on: String(parsed.previously_on || '').trim(),
     what_you_were_up_to: Array.isArray(parsed.what_you_were_up_to) ? parsed.what_you_were_up_to.map(String) : [],
-    next_objectives: Array.isArray(parsed.next_objectives) ? parsed.next_objectives.map(String) : [],
+    // Keep the rich {title, description, priority} shape — recap_panel.py
+    // renders priority badges when it gets objects, and falls back to plain
+    // text when it doesn't, so this is safe either way.
+    next_objectives: objectives,
   };
 }
 
@@ -81,7 +86,18 @@ export default async function handler(req, res) {
       },
       body: JSON.stringify({
         model,
-        messages: [{ role: 'user', content: buildPrompt(game_name, player_name, save_data, events) }],
+        response_format: { type: 'json_object' },
+        messages: [
+          {
+            role: 'system',
+            content:
+              'You are the official Xsolla Game Recap engine. Generate a cinematic, high-energy gaming recap as a valid JSON object with keys: "previously_on" (string), "what_you_were_up_to" (array of up to 3 strings), and "next_objectives" (array of up to 3 objects with "title", "description", and "priority" where priority is HIGH, MEDIUM, or OPTIONAL).',
+          },
+          {
+            role: 'user',
+            content: buildPrompt(game_name, player_name, save_data, events),
+          },
+        ],
       }),
     });
 

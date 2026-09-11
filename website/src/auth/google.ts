@@ -1,105 +1,142 @@
-// Real Google Sign-In via Google Identity Services' OAuth2 token client —
-// a public-client implicit flow built for SPAs. No client secret is needed
-// or ever exposed; only a public Client ID from Google Cloud Console.
-//
-// Setup (one-time, in Google Cloud Console -> APIs & Services -> Credentials):
-//   1. Create an OAuth 2.0 Client ID of type "Web application".
-//   2. Add Authorized JavaScript origins for both http://localhost:5183 (dev)
-//      and your deployed Vercel domain.
-//   3. Copy the Client ID into VITE_GOOGLE_CLIENT_ID — in website/.env.local
-//      for local dev, and as a Vercel Environment Variable for production.
+// Google Identity Services (GIS) Real Authentication Handler
 
-export interface GoogleProfile {
+export interface GoogleUserProfile {
+  token: string;
+  user: string;
   email: string;
-  name: string;
-  picture?: string;
-  accessToken: string;
+  avatar?: string;
 }
 
 declare global {
   interface Window {
-    google?: {
-      accounts: {
-        oauth2: {
-          initTokenClient: (config: {
-            client_id: string;
-            scope: string;
-            callback: (response: { access_token?: string; error?: string; error_description?: string }) => void;
-            error_callback?: (error: { type?: string; message?: string }) => void;
-          }) => { requestAccessToken: () => void };
-        };
-      };
-    };
+    google?: any;
   }
 }
 
-const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
-const SCRIPT_ID = 'google-identity-services';
+export const DEFAULT_GOOGLE_CLIENT_ID = '476389939912-j9bti4788aqhd9nf8fuin8skg0d0j353.apps.googleusercontent.com';
 
-let scriptPromise: Promise<void> | null = null;
-
-function loadGoogleScript(): Promise<void> {
-  if (scriptPromise) return scriptPromise;
-  scriptPromise = new Promise((resolve, reject) => {
-    if (document.getElementById(SCRIPT_ID)) {
-      resolve();
-      return;
-    }
-    const script = document.createElement('script');
-    script.id = SCRIPT_ID;
-    script.src = 'https://accounts.google.com/gsi/client';
-    script.async = true;
-    script.defer = true;
-    script.onload = () => resolve();
-    script.onerror = () => reject(new Error('Failed to load Google Identity Services.'));
-    document.head.appendChild(script);
-  });
-  return scriptPromise;
+export function getGoogleClientId(): string {
+  const envId = (import.meta as any).env?.VITE_GOOGLE_CLIENT_ID;
+  if (envId && envId.trim()) return envId.trim();
+  try {
+    const localId = localStorage.getItem('xsolla_google_client_id');
+    if (localId && localId.trim()) return localId.trim();
+  } catch {
+    // Ignore storage errors
+  }
+  return DEFAULT_GOOGLE_CLIENT_ID;
 }
 
-export function isGoogleSignInConfigured(): boolean {
-  return Boolean(GOOGLE_CLIENT_ID);
+export function setGoogleClientId(clientId: string) {
+  try {
+    localStorage.setItem('xsolla_google_client_id', clientId.trim());
+  } catch {
+    // Ignore
+  }
 }
 
-export async function signInWithGoogle(): Promise<GoogleProfile> {
-  if (!GOOGLE_CLIENT_ID) {
-    throw new Error(
-      "Google Sign-In isn't configured yet — set VITE_GOOGLE_CLIENT_ID (see src/auth/google.ts for setup steps)."
+// Decode base64url JWT payload
+function decodeJwt(token: string): any {
+  try {
+    const base64Url = token.split('.')[1];
+    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+    const jsonPayload = decodeURIComponent(
+      atob(base64)
+        .split('')
+        .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+        .join('')
     );
+    return JSON.parse(jsonPayload);
+  } catch (err) {
+    console.error('[GoogleAuth] Failed to decode ID token:', err);
+    return null;
+  }
+}
+
+export function promptGoogleLogin(
+  clientId: string,
+  onSuccess: (profile: GoogleUserProfile) => void,
+  onError: (errorMsg: string) => void
+) {
+  if (!window.google?.accounts?.oauth2 && !window.google?.accounts?.id) {
+    onError('Google Identity Services library is still loading. Please try again in a moment.');
+    return;
   }
 
-  await loadGoogleScript();
+  // Method 1: Token Client (OAuth popup - highly reliable across all browsers)
+  if (window.google.accounts.oauth2) {
+    try {
+      const client = window.google.accounts.oauth2.initTokenClient({
+        client_id: clientId,
+        scope: 'email profile openid',
+        callback: async (tokenResponse: any) => {
+          if (tokenResponse.error) {
+            onError(`Google login failed: ${tokenResponse.error}`);
+            return;
+          }
 
-  const google = window.google;
-  if (!google?.accounts?.oauth2) {
-    throw new Error('Google Identity Services failed to load.');
+          if (tokenResponse.access_token) {
+            try {
+              const res = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+                headers: { Authorization: `Bearer ${tokenResponse.access_token}` },
+              });
+              if (!res.ok) throw new Error(`HTTP ${res.status}`);
+              const info = await res.json();
+
+              const profile: GoogleUserProfile = {
+                token: tokenResponse.access_token,
+                user: info.name || info.given_name || info.email?.split('@')[0] || 'Player',
+                email: info.email,
+                avatar: info.picture,
+              };
+
+              onSuccess(profile);
+            } catch (err) {
+              onError('Failed to fetch Google profile information.');
+            }
+          }
+        },
+      });
+
+      client.requestAccessToken({ prompt: 'select_account' });
+      return;
+    } catch (err: any) {
+      console.warn('[GoogleAuth] Token client failed, falling back to One Tap / ID flow:', err);
+    }
   }
 
-  const accessToken = await new Promise<string>((resolve, reject) => {
-    const client = google.accounts.oauth2.initTokenClient({
-      client_id: GOOGLE_CLIENT_ID,
-      scope: 'openid email profile',
-      callback: (response) => {
-        if (response.error || !response.access_token) {
-          reject(new Error(response.error_description || response.error || 'Google sign-in failed.'));
+  // Method 2: GIS ID flow fallback
+  try {
+    window.google.accounts.id.initialize({
+      client_id: clientId,
+      callback: (res: any) => {
+        if (!res.credential) {
+          onError('No credential returned from Google.');
           return;
         }
-        resolve(response.access_token);
-      },
-      error_callback: (error) => {
-        reject(new Error(error?.message || 'Google sign-in was cancelled.'));
+        const payload = decodeJwt(res.credential);
+        if (!payload) {
+          onError('Failed to parse Google account token.');
+          return;
+        }
+
+        const profile: GoogleUserProfile = {
+          token: res.credential,
+          user: payload.name || payload.given_name || payload.email?.split('@')[0] || 'Player',
+          email: payload.email,
+          avatar: payload.picture,
+        };
+
+        onSuccess(profile);
       },
     });
-    client.requestAccessToken();
-  });
 
-  const res = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
-  if (!res.ok) {
-    throw new Error('Signed in with Google, but fetching your profile failed.');
+    window.google.accounts.id.prompt((notification: any) => {
+      if (notification.isNotDisplayed()) {
+        onError('Google prompt could not be displayed. Ensure popups are allowed.');
+      }
+    });
+  } catch (err: any) {
+    onError(err.message || 'Google Sign-In initialization failed.');
   }
-
-  const data = await res.json();
-  return { email: data.email, name: data.name, picture: data.picture, accessToken };
 }

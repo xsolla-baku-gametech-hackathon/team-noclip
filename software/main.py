@@ -83,6 +83,7 @@ class XsollaGameRecapApp:
             on_toggle_record=self._on_record_toggled,
             on_toggle_pause=self._on_pause_toggled,
             on_login_request=self._on_login,
+            on_logout_request=self._on_logout,
             video_recorder=self.video_rec
         )
 

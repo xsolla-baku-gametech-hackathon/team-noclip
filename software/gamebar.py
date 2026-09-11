@@ -31,6 +31,7 @@ class GameBarOverlay:
                  on_toggle_record: Optional[Callable] = None,
                  on_toggle_pause: Optional[Callable] = None,
                  on_login_request: Optional[Callable] = None,
+                 on_logout_request: Optional[Callable] = None,
                  video_recorder: Optional[object] = None):
         self.master = master
         self.detector = detector
@@ -42,7 +43,11 @@ class GameBarOverlay:
         self.on_toggle_record = on_toggle_record
         self.on_toggle_pause = on_toggle_pause
         self.on_login_request = on_login_request
+        self.on_logout_request = on_logout_request
         self.video_rec = video_recorder
+
+        self.profile_popup: Optional[tk.Toplevel] = None
+        self._popup_close_timer = None
 
         self.btn_rec = None
         self.btn_snap = None
@@ -289,7 +294,7 @@ class GameBarOverlay:
         if auth_state.is_logged_in():
             user = auth_state.get_user_label()
             self.btn_login_badge.config(
-                text=f"🟢 {user}",
+                text=f"🟢 {user} ▾",
                 font=("Segoe UI", 8, "bold"),
                 fg="#56d364",
                 bg="#161b22"
@@ -305,17 +310,230 @@ class GameBarOverlay:
         if self.recap_tab and self.is_recap_open:
             self.recap_tab.refresh()
 
+    def _cancel_profile_popup_timer(self):
+        if self._popup_close_timer:
+            try:
+                self.master.after_cancel(self._popup_close_timer)
+            except Exception:
+                pass
+            self._popup_close_timer = None
+
+    def _schedule_profile_popup_close(self):
+        self._cancel_profile_popup_timer()
+        self._popup_close_timer = self.master.after(300, self._check_and_close_profile_popup)
+
+    def _check_and_close_profile_popup(self):
+        if not self.profile_popup or not self.profile_popup.winfo_exists():
+            return
+        try:
+            x, y = self.profile_popup.winfo_pointerxy()
+            if self.btn_login_badge and self.btn_login_badge.winfo_exists():
+                bx1 = self.btn_login_badge.winfo_rootx()
+                by1 = self.btn_login_badge.winfo_rooty()
+                bx2 = bx1 + self.btn_login_badge.winfo_width()
+                by2 = by1 + self.btn_login_badge.winfo_height()
+                if bx1 <= x <= bx2 and by1 <= y <= by2:
+                    return
+            px1 = self.profile_popup.winfo_rootx()
+            py1 = self.profile_popup.winfo_rooty()
+            px2 = px1 + self.profile_popup.winfo_width()
+            py2 = py1 + self.profile_popup.winfo_height()
+            if px1 <= x <= px2 and py1 <= y <= py2:
+                return
+        except Exception:
+            pass
+        self._close_profile_dropdown()
+
+    def _close_profile_dropdown(self):
+        self._cancel_profile_popup_timer()
+        if self.profile_popup and self.profile_popup.winfo_exists():
+            try:
+                self.profile_popup.destroy()
+            except Exception:
+                pass
+            self.profile_popup = None
+
+    def _show_profile_dropdown(self):
+        if not auth_state.is_logged_in():
+            return
+        if not self.btn_login_badge or not self.btn_login_badge.winfo_exists():
+            return
+
+        self._cancel_profile_popup_timer()
+
+        if self.profile_popup and self.profile_popup.winfo_exists():
+            self.profile_popup.lift()
+            return
+
+        user_info = auth_state.get_current_user()
+        user_name = user_info.get("user_name") or auth_state.get_user_label() or "Player"
+        user_email = user_info.get("user_email") or "Connected Account"
+
+        self.btn_login_badge.update_idletasks()
+        bx = self.btn_login_badge.winfo_rootx()
+        by = self.btn_login_badge.winfo_rooty() + self.btn_login_badge.winfo_height() + 6
+        target_width = 250
+        target_height = 155
+
+        sw = self.master.winfo_screenwidth()
+        if bx + target_width > sw - 16:
+            bx = sw - target_width - 16
+
+        self.profile_popup = tk.Toplevel(self.master)
+        self.profile_popup.title("Xsolla Profile")
+        self.profile_popup.configure(bg="#080b10")
+        self.profile_popup.overrideredirect(True)
+        self.profile_popup.attributes("-topmost", True)
+        self.profile_popup.attributes("-alpha", 0.0)
+
+        make_window_invisible_to_capture(self.profile_popup)
+
+        border = tk.Frame(
+            self.profile_popup,
+            bg="#0d1117",
+            highlightthickness=1,
+            highlightbackground="#70e1ff",
+            padx=14,
+            pady=12
+        )
+        border.pack(fill="both", expand=True)
+
+        top_row = tk.Frame(border, bg="#0d1117")
+        top_row.pack(fill="x", pady=(0, 4))
+
+        avatar = tk.Label(
+            top_row,
+            text="👤",
+            font=("Segoe UI", 14),
+            bg="#161b22",
+            fg="#70e1ff",
+            padx=6,
+            pady=3,
+            highlightthickness=1,
+            highlightbackground="#30363d"
+        )
+        avatar.pack(side="left", padx=(0, 10))
+
+        info_col = tk.Frame(top_row, bg="#0d1117")
+        info_col.pack(side="left", fill="x", expand=True)
+
+        tk.Label(
+            info_col,
+            text=user_name,
+            font=("Segoe UI", 9, "bold"),
+            fg="#f0f6fc",
+            bg="#0d1117"
+        ).pack(anchor="w")
+
+        tk.Label(
+            info_col,
+            text="🟢 Connected & Active",
+            font=("Segoe UI", 7),
+            fg="#56d364",
+            bg="#0d1117"
+        ).pack(anchor="w")
+
+        tk.Label(
+            border,
+            text=user_email,
+            font=("Segoe UI", 8),
+            fg="#8b949e",
+            bg="#0d1117",
+            wraplength=220,
+            justify="left"
+        ).pack(anchor="w", pady=(2, 8))
+
+        tk.Frame(border, bg="#21262d", height=1).pack(fill="x", pady=(0, 10))
+
+        btn_signout = tk.Label(
+            border,
+            text="🚪  SIGN OUT",
+            font=("Segoe UI", 9, "bold"),
+            bg="#21262d",
+            fg="#ff7b72",
+            cursor="hand2",
+            pady=6
+        )
+        btn_signout.pack(fill="x")
+
+        def _execute_signout():
+            self._close_profile_dropdown()
+            self.close()
+            if self.on_logout_request:
+                self.on_logout_request()
+            else:
+                auth_state.log_out()
+                self.update_auth_ui()
+
+        btn_signout.bind("<Button-1>", lambda e: _execute_signout())
+        btn_signout.bind("<Enter>", lambda e: btn_signout.config(bg="#da3633", fg="#ffffff"))
+        btn_signout.bind("<Leave>", lambda e: btn_signout.config(bg="#21262d", fg="#ff7b72"))
+
+        for w in (self.profile_popup, border, top_row, avatar, info_col, btn_signout):
+            w.bind("<Enter>", lambda e: self._cancel_profile_popup_timer())
+            w.bind("<Leave>", lambda e: self._schedule_profile_popup_close())
+
+        self.profile_popup.geometry(f"{target_width}x10+{bx}+{by}")
+        self.profile_popup.deiconify()
+
+        steps = 5
+        duration_step = 14
+
+        def _step(i):
+            if not self.profile_popup or not self.profile_popup.winfo_exists():
+                return
+            frac = (i + 1) / steps
+            h = int(10 + (target_height - 10) * frac)
+            alpha = min(1.0, 0.3 + 0.7 * frac)
+            try:
+                self.profile_popup.geometry(f"{target_width}x{h}+{bx}+{by}")
+                self.profile_popup.attributes("-alpha", alpha)
+            except Exception:
+                pass
+            if i + 1 < steps:
+                self.master.after(duration_step, lambda: _step(i + 1))
+            else:
+                try:
+                    self.profile_popup.geometry(f"{target_width}x{target_height}+{bx}+{by}")
+                    self.profile_popup.attributes("-alpha", 1.0)
+                except Exception:
+                    pass
+
+        _step(0)
+
+    def _on_login_badge_enter(self):
+        if auth_state.is_logged_in():
+            self._cancel_profile_popup_timer()
+            self._show_profile_dropdown()
+            if self.btn_login_badge and self.btn_login_badge.winfo_exists():
+                self.btn_login_badge.config(bg="#21262d")
+        else:
+            if self.btn_login_badge and self.btn_login_badge.winfo_exists():
+                self.btn_login_badge.config(bg="#38bdf8", fg="#0d1117")
+
+    def _on_login_badge_leave(self):
+        if auth_state.is_logged_in():
+            self._schedule_profile_popup_close()
+            if self.btn_login_badge and self.btn_login_badge.winfo_exists():
+                self.btn_login_badge.config(bg="#161b22")
+        else:
+            if self.btn_login_badge and self.btn_login_badge.winfo_exists():
+                self.btn_login_badge.config(bg="#1f293d", fg="#70e1ff")
+
     def _on_login_badge_click(self):
         if not auth_state.is_logged_in():
             if self.on_login_request:
                 self.on_login_request()
         else:
-            # When clicked while logged in, offer quick sign out
-            auth_state.log_out()
-            self.update_auth_ui()
-            self.show_toast("Signed out of Xsolla account", color="#70e1ff")
+            if self.profile_popup and self.profile_popup.winfo_exists():
+                self._close_profile_dropdown()
+            else:
+                self._show_profile_dropdown()
 
     def _on_escape(self):
+        if self.profile_popup and self.profile_popup.winfo_exists():
+            self._close_profile_dropdown()
+            return
         if self.visual_memories_tab and getattr(self.visual_memories_tab, "is_viewer_active", False):
             self.visual_memories_tab.close_viewer()
             return
@@ -330,6 +548,7 @@ class GameBarOverlay:
     def close(self):
         """Hides the GameBar and the dim backdrop, and minimizes the opened recordings folder."""
         self.is_open = False
+        self._close_profile_dropdown()
         if self._timer_job:
             try:
                 self.master.after_cancel(self._timer_job)
@@ -549,7 +768,7 @@ class GameBarOverlay:
         self.btn_recap.bind("<Enter>", lambda e: self._on_recap_hover(True))
         self.btn_recap.bind("<Leave>", lambda e: self._on_recap_hover(False))
 
-        # Auth indicator / quick login button
+        # Auth indicator / user profile dropdown button
         self.btn_login_badge = tk.Label(
             action_frame,
             text="🔑 LOGIN",
@@ -561,6 +780,8 @@ class GameBarOverlay:
             pady=4
         )
         self.btn_login_badge.bind("<Button-1>", lambda e: self._on_login_badge_click())
+        self.btn_login_badge.bind("<Enter>", lambda e: self._on_login_badge_enter())
+        self.btn_login_badge.bind("<Leave>", lambda e: self._on_login_badge_leave())
 
         # Active Video Recording Controls (Only shown during video recording)
         self.rec_badge = tk.Label(
@@ -609,24 +830,6 @@ class GameBarOverlay:
         self.btn_album.pack(side="left", pady=12, padx=2)
         self.btn_recap.pack(side="left", pady=12, padx=2)
         self.btn_login_badge.pack(side="left", pady=12, padx=2)
-
-        # 7. Close Button [X] on the far right
-        close_frame = tk.Frame(self.bar, bg="#0d1117", padx=12)
-        close_frame.pack(side="right", fill="y")
-        btn_close = tk.Label(
-            close_frame,
-            text="✕",
-            font=("Segoe UI", 11, "bold"),
-            fg="#8b949e",
-            bg="#0d1117",
-            cursor="hand2",
-            padx=8,
-            pady=4
-        )
-        btn_close.pack(anchor="center", expand=True)
-        btn_close.bind("<Button-1>", lambda e: self.close())
-        btn_close.bind("<Enter>", lambda e: btn_close.config(fg="#ff5c5c", bg="#21262d"))
-        btn_close.bind("<Leave>", lambda e: btn_close.config(fg="#8b949e", bg="#0d1117"))
 
         # 8. Integrated Tab Panels Container (Expands directly below navbar)
         self.tab_divider = tk.Frame(self.outer, bg="#1a2230", height=1)

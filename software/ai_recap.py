@@ -2,8 +2,11 @@
 Xsolla Game Recap - Gameplay Story & Recap Generator
 Calls the website's recap endpoint (which holds the real AI service key
 server-side) to turn the current save analysis into a "Previously On...",
-status summary, and next objectives. No local fallback: if the service
-isn't configured or fails, that's shown honestly rather than fabricated.
+status summary, and next objectives. No local fallback and no direct
+OpenRouter call from this app: both would mean shipping (or requiring) an
+AI service key inside the desktop build, which is exactly what routing
+through the website exists to avoid. If the service isn't configured or
+fails, that's shown honestly rather than fabricated or bypassed.
 """
 
 from typing import Dict, Any
@@ -32,8 +35,9 @@ def _unavailable(save_analysis: Dict[str, Any], reason: str) -> Dict[str, Any]:
 
 def generate_recap(save_analysis: Dict[str, Any]) -> Dict[str, Any]:
     """Generates a recap via the website's /api/recap endpoint. Never
-    fabricates content locally — a failure is surfaced as an honest
-    'unavailable' message instead of a fake narrative."""
+    fabricates content locally and never falls back to calling OpenRouter
+    directly — a failure is surfaced as an honest 'unavailable' message
+    instead of a fake narrative or a locally-held API key."""
     game_name = save_analysis.get("game_name", "Game")
     player_name = save_analysis.get("player_name", "Player")
 
