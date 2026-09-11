@@ -106,48 +106,55 @@ export interface PublicShare {
   created_at: string;
 }
 
+// URLs below use static filenames (api/auth.js, api/device.js, api/me.js,
+// api/share.js) with a query param picking the route, not bracket-named
+// path segments — this specific Vercel deployment doesn't register
+// bracket-named dynamic route files ([id].js, [...x].js) as functions at
+// all, verified directly against production. See api/auth.js for the story.
+
 export const establishSession = (accessToken: string) =>
-  apiFetch<{ user: CurrentUser }>('/api/auth/session', {
+  apiFetch<{ user: CurrentUser }>('/api/auth?action=session', {
     method: 'POST',
     body: JSON.stringify({ access_token: accessToken }),
   });
 
-export const logout = () => apiFetch<{ ok: true }>('/api/auth/logout', { method: 'POST' });
+export const logout = () => apiFetch<{ ok: true }>('/api/auth?action=logout', { method: 'POST' });
 
 export const approveDevicePairing = (code: string) =>
-  apiFetch<{ ok: true }>('/api/device/approve', {
+  apiFetch<{ ok: true }>('/api/device?action=approve', {
     method: 'POST',
     body: JSON.stringify({ code }),
   });
 
 export const getMe = () => apiFetch<{ user: CurrentUser }>('/api/me');
-export const getMyGames = () => apiFetch<{ games: GameSummary[] }>('/api/me/games');
+export const getMyGames = () => apiFetch<{ games: GameSummary[] }>('/api/me?resource=games');
 export const getGameDetail = (slug: string) =>
-  apiFetch<{ game: GameSummary }>(`/api/me/games/${encodeURIComponent(slug)}`);
+  apiFetch<{ game: GameSummary }>(`/api/me?resource=game&slug=${encodeURIComponent(slug)}`);
 export const getGameSessions = (slug: string) =>
-  apiFetch<{ sessions: SessionSummary[] }>(`/api/me/games/${encodeURIComponent(slug)}/sessions`);
+  apiFetch<{ sessions: SessionSummary[] }>(`/api/me?resource=game-sessions&slug=${encodeURIComponent(slug)}`);
 export const getRecap = (sessionId: string) =>
-  apiFetch<{ recap: Recap }>(`/api/me/sessions/${encodeURIComponent(sessionId)}/recap`);
+  apiFetch<{ recap: Recap }>(`/api/me?resource=session-recap&session_id=${encodeURIComponent(sessionId)}`);
 export const generateRecap = (sessionId: string) =>
-  apiFetch<{ recap: Recap }>(`/api/me/sessions/${encodeURIComponent(sessionId)}/recap`, { method: 'POST' });
+  apiFetch<{ recap: Recap }>(`/api/me?resource=session-recap&session_id=${encodeURIComponent(sessionId)}`, {
+    method: 'POST',
+  });
 
-export const getMyRecaps = () => apiFetch<{ recaps: RecapListItem[] }>('/api/me/recaps');
+export const getMyRecaps = () => apiFetch<{ recaps: RecapListItem[] }>('/api/me?resource=recaps');
 
 export const getMyMedia = (params?: { type?: 'screenshot' | 'video'; game?: string }) => {
-  const qs = new URLSearchParams();
+  const qs = new URLSearchParams({ resource: 'media' });
   if (params?.type) qs.set('type', params.type);
   if (params?.game) qs.set('game', params.game);
-  const suffix = qs.toString() ? `?${qs.toString()}` : '';
-  return apiFetch<{ media: MediaItem[]; next_offset: number | null }>(`/api/me/media${suffix}`);
+  return apiFetch<{ media: MediaItem[]; next_offset: number | null }>(`/api/me?${qs.toString()}`);
 };
 
-export const getMySharePackages = () => apiFetch<{ shares: ShareListItem[] }>('/api/me/share-packages');
+export const getMySharePackages = () => apiFetch<{ shares: ShareListItem[] }>('/api/me?resource=share-packages');
 
 export const createSharePackage = (input: { game_slug: string; recap_id?: string; media_ids?: string[]; title?: string }) =>
-  apiFetch<{ share: { id: string; created_at: string } }>('/api/me/share-packages', {
+  apiFetch<{ share: { id: string; created_at: string } }>('/api/me?resource=share-packages', {
     method: 'POST',
     body: JSON.stringify(input),
   });
 
 export const getPublicShare = (shareId: string) =>
-  apiFetch<{ share: PublicShare }>(`/api/share/${encodeURIComponent(shareId)}`);
+  apiFetch<{ share: PublicShare }>(`/api/share?id=${encodeURIComponent(shareId)}`);

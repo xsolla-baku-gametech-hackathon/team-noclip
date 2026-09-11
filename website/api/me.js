@@ -1,21 +1,20 @@
-// Consolidated /api/me/* routes (see api/auth/[...action].js for why — the
-// Hobby plan's 12-function cap). Every authenticated "my stuff" endpoint
-// lives here now, dispatched by path segments + method. URLs unchanged:
-//   GET  /api/me
-//   GET  /api/me/games
-//   GET  /api/me/games/:slug
-//   GET  /api/me/games/:slug/sessions
-//   GET  /api/me/recaps
-//   GET  /api/me/sessions/:id/recap
-//   POST /api/me/sessions/:id/recap
-//   POST /api/me/sync-session
-//   GET  /api/me/media
-//   POST /api/me/media/upload
-//   GET  /api/me/share-packages
-//   POST /api/me/share-packages
-import { ensureSchema, requireDb, slugify, DbNotConfigured } from '../_lib/db.js';
-import { getAuthedUserId } from '../_lib/auth.js';
-import { storeFile, MAX_UPLOAD_BYTES } from '../_lib/storage.js';
+// Consolidated /api/me/* routes (see api/auth.js for why this is a static
+// filename dispatched by query param, not a bracket route). URLs:
+//   GET  /api/me                                     (no resource)
+//   GET  /api/me?resource=games
+//   GET  /api/me?resource=game&slug=...
+//   GET  /api/me?resource=game-sessions&slug=...
+//   GET  /api/me?resource=recaps
+//   GET  /api/me?resource=session-recap&session_id=...
+//   POST /api/me?resource=session-recap&session_id=...
+//   POST /api/me?resource=sync-session
+//   GET  /api/me?resource=media[&type=...][&game=...][&offset=...]
+//   POST /api/me?resource=media-upload
+//   GET  /api/me?resource=share-packages
+//   POST /api/me?resource=share-packages
+import { ensureSchema, requireDb, slugify, DbNotConfigured } from './_lib/db.js';
+import { getAuthedUserId } from './_lib/auth.js';
+import { storeFile, MAX_UPLOAD_BYTES } from './_lib/storage.js';
 
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 const DEFAULT_MODEL = 'openai/gpt-4o-mini';
@@ -32,7 +31,7 @@ async function getMe(req, res, userId) {
   res.status(200).json({ user: rows[0] });
 }
 
-// ---- GET /api/me/games -----------------------------------------------------
+// ---- GET /api/me?resource=games --------------------------------------------
 async function listGames(req, res, userId) {
   const db = requireDb();
   const games = await db`
@@ -48,7 +47,7 @@ async function listGames(req, res, userId) {
   res.status(200).json({ games });
 }
 
-// ---- GET /api/me/games/:slug -----------------------------------------------
+// ---- GET /api/me?resource=game&slug=... -------------------------------------
 async function getGame(req, res, userId, slug) {
   const db = requireDb();
   const rows = await db`
@@ -66,7 +65,7 @@ async function getGame(req, res, userId, slug) {
   res.status(200).json({ game: rows[0] });
 }
 
-// ---- GET /api/me/games/:slug/sessions --------------------------------------
+// ---- GET /api/me?resource=game-sessions&slug=... -----------------------------
 async function listGameSessions(req, res, userId, slug) {
   const db = requireDb();
   const sessions = await db`
@@ -82,7 +81,7 @@ async function listGameSessions(req, res, userId, slug) {
   res.status(200).json({ sessions });
 }
 
-// ---- GET /api/me/recaps -----------------------------------------------------
+// ---- GET /api/me?resource=recaps ----------------------------------------------
 async function listRecaps(req, res, userId) {
   const db = requireDb();
   const recaps = await db`
@@ -96,7 +95,7 @@ async function listRecaps(req, res, userId) {
   res.status(200).json({ recaps });
 }
 
-// ---- GET/POST /api/me/sessions/:id/recap -----------------------------------
+// ---- GET/POST /api/me?resource=session-recap&session_id=... -------------------
 function buildRecapPrompt(gameName, events) {
   const eventLines = (events || [])
     .map((e) => {
@@ -208,7 +207,7 @@ async function getOrGenerateRecap(req, res, userId, sessionId) {
   res.status(200).json({ recap: rows[0] });
 }
 
-// ---- POST /api/me/sync-session ---------------------------------------------
+// ---- POST /api/me?resource=sync-session ---------------------------------------
 async function syncSession(req, res, userId) {
   const db = requireDb();
   const {
@@ -258,7 +257,7 @@ async function syncSession(req, res, userId) {
   res.status(200).json({ ok: true, session_id: sessionId, game_id: gameId });
 }
 
-// ---- GET /api/me/media ------------------------------------------------------
+// ---- GET /api/me?resource=media ------------------------------------------------
 async function listMedia(req, res, userId) {
   const db = requireDb();
   const type = typeof req.query.type === 'string' ? req.query.type : null;
@@ -311,7 +310,7 @@ async function listMedia(req, res, userId) {
   res.status(200).json({ media, next_offset: media.length === MEDIA_PAGE_SIZE ? offset + MEDIA_PAGE_SIZE : null });
 }
 
-// ---- POST /api/me/media/upload ----------------------------------------------
+// ---- POST /api/me?resource=media-upload ------------------------------------------
 async function uploadMedia(req, res, userId) {
   const db = requireDb();
   const {
@@ -364,7 +363,7 @@ async function uploadMedia(req, res, userId) {
   res.status(200).json({ media: rows[0] });
 }
 
-// ---- GET/POST /api/me/share-packages -----------------------------------------
+// ---- GET/POST /api/me?resource=share-packages --------------------------------------
 async function shareGetOrCreate(req, res, userId) {
   const db = requireDb();
 
@@ -434,8 +433,7 @@ export default async function handler(req, res) {
     return;
   }
 
-  const raw = req.query.path;
-  const path = Array.isArray(raw) ? raw : raw ? [raw] : [];
+  const resource = req.query.resource || 'self';
 
   try {
     const userId = await getAuthedUserId(req);
@@ -446,19 +444,18 @@ export default async function handler(req, res) {
 
     await ensureSchema();
 
-    if (path.length === 0 && req.method === 'GET') return await getMe(req, res, userId);
-    if (path[0] === 'games' && path.length === 1 && req.method === 'GET') return await listGames(req, res, userId);
-    if (path[0] === 'games' && path.length === 2 && req.method === 'GET') return await getGame(req, res, userId, path[1]);
-    if (path[0] === 'games' && path.length === 3 && path[2] === 'sessions' && req.method === 'GET')
-      return await listGameSessions(req, res, userId, path[1]);
-    if (path[0] === 'recaps' && path.length === 1 && req.method === 'GET') return await listRecaps(req, res, userId);
-    if (path[0] === 'sessions' && path.length === 3 && path[2] === 'recap' && (req.method === 'GET' || req.method === 'POST'))
-      return await getOrGenerateRecap(req, res, userId, path[1]);
-    if (path[0] === 'sync-session' && path.length === 1 && req.method === 'POST') return await syncSession(req, res, userId);
-    if (path[0] === 'media' && path.length === 1 && req.method === 'GET') return await listMedia(req, res, userId);
-    if (path[0] === 'media' && path.length === 2 && path[1] === 'upload' && req.method === 'POST')
-      return await uploadMedia(req, res, userId);
-    if (path[0] === 'share-packages' && path.length === 1 && (req.method === 'GET' || req.method === 'POST'))
+    if (resource === 'self' && req.method === 'GET') return await getMe(req, res, userId);
+    if (resource === 'games' && req.method === 'GET') return await listGames(req, res, userId);
+    if (resource === 'game' && req.method === 'GET') return await getGame(req, res, userId, req.query.slug);
+    if (resource === 'game-sessions' && req.method === 'GET')
+      return await listGameSessions(req, res, userId, req.query.slug);
+    if (resource === 'recaps' && req.method === 'GET') return await listRecaps(req, res, userId);
+    if (resource === 'session-recap' && (req.method === 'GET' || req.method === 'POST'))
+      return await getOrGenerateRecap(req, res, userId, req.query.session_id);
+    if (resource === 'sync-session' && req.method === 'POST') return await syncSession(req, res, userId);
+    if (resource === 'media' && req.method === 'GET') return await listMedia(req, res, userId);
+    if (resource === 'media-upload' && req.method === 'POST') return await uploadMedia(req, res, userId);
+    if (resource === 'share-packages' && (req.method === 'GET' || req.method === 'POST'))
       return await shareGetOrCreate(req, res, userId);
 
     res.status(404).json({ error: 'Not found.' });

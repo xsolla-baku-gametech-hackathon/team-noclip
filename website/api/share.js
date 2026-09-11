@@ -1,8 +1,9 @@
-// Public, unauthenticated — this is the whole point of a share link. Only
-// returns what was explicitly selected into the package: game title, the
-// recap (if one was attached), and the chosen media. Never the owner's
-// email, raw user_id, or anything outside what was shared.
-import { ensureSchema, requireDb, DbNotConfigured } from '../_lib/db.js';
+// Public, unauthenticated — GET /api/share?id=... (renamed from the bracket
+// route api/share/[shareId].js — see api/auth.js for why). Only returns
+// what was explicitly selected into the package: game title, the recap (if
+// one was attached), and the chosen media. Never the owner's email, raw
+// user_id, or anything outside what was shared.
+import { ensureSchema, requireDb, DbNotConfigured } from './_lib/db.js';
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -21,7 +22,12 @@ export default async function handler(req, res) {
     await ensureSchema();
     const db = requireDb();
 
-    const { shareId } = req.query;
+    const shareId = req.query.id;
+    if (!shareId) {
+      res.status(400).json({ error: 'Missing id.' });
+      return;
+    }
+
     const rows = await db`
       SELECT sp.id, sp.title, sp.media_ids, sp.created_at,
              g.title AS game_title,

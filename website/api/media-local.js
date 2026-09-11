@@ -1,9 +1,10 @@
-// Dev-only file server for the local-disk storage fallback in _lib/storage.js.
-// In production, BLOB_READ_WRITE_TOKEN is set and storeFile() returns a real
-// Vercel Blob public URL instead — this route is never hit there since no
-// media_assets row would ever contain an /api/media-local/ url in that mode.
+// Dev-only file server for the local-disk storage fallback in _lib/storage.js
+// — GET /api/media-local?key=... (renamed from the bracket route
+// api/media-local/[...key].js — see api/auth.js for why). In production,
+// BLOB_READ_WRITE_TOKEN is set and storeFile() returns a real Vercel Blob
+// public URL instead, so this route is never hit there.
 import path from 'node:path';
-import { readLocalFile } from '../_lib/storage.js';
+import { readLocalFile } from './_lib/storage.js';
 
 const CONTENT_TYPES = {
   '.png': 'image/png',
@@ -20,8 +21,7 @@ export default async function handler(req, res) {
     return;
   }
 
-  const keyParts = req.query.key;
-  const key = Array.isArray(keyParts) ? keyParts.join('/') : String(keyParts || '');
+  const key = String(req.query.key || '');
   const data = readLocalFile(key);
   if (!data) {
     res.status(404).json({ error: 'Not found.' });

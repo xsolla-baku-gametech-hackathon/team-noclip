@@ -1,12 +1,16 @@
-// Consolidated auth routes — Vercel's Hobby plan caps a deployment at 12
-// serverless functions, so every /api/auth/* endpoint is dispatched from
-// this one file instead of one file per route. URLs are unchanged:
-//   POST /api/auth/login
-//   POST /api/auth/signup
-//   POST /api/auth/logout
-//   POST /api/auth/session
-//   POST /api/auth/device-token
-import { ensureSchema, requireDb, DbNotConfigured } from '../_lib/db.js';
+// Consolidated auth routes. Renamed from the bracket-based
+// api/auth/[...action].js — this Vercel deployment does not register
+// bracket-named dynamic route files as functions at all (verified: even a
+// plain single-segment [id].js fell through to the SPA rewrite in
+// production, while static-named files like api/recap.js worked fine). So
+// every route lives at a static filename now, dispatched by a query param
+// instead of the URL path. Same behavior, different URL shape:
+//   POST /api/auth?action=login
+//   POST /api/auth?action=signup
+//   POST /api/auth?action=logout
+//   POST /api/auth?action=session
+//   POST /api/auth?action=device-token
+import { ensureSchema, requireDb, DbNotConfigured } from './_lib/db.js';
 import {
   createSessionToken,
   setSessionCookie,
@@ -16,7 +20,7 @@ import {
   getAuthedUserId,
   generateDeviceToken,
   hashDeviceToken,
-} from '../_lib/auth.js';
+} from './_lib/auth.js';
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -165,7 +169,7 @@ export default async function handler(req, res) {
     return;
   }
 
-  const action = Array.isArray(req.query.action) ? req.query.action[0] : req.query.action;
+  const action = req.query.action;
   const route = ROUTES[action];
   if (!route) {
     res.status(404).json({ error: 'Not found.' });

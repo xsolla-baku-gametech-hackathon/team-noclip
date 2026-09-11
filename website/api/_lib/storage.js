@@ -34,7 +34,7 @@ export async function storeFile(buffer, { userId, filename, contentType }) {
   const fullPath = path.join(LOCAL_MEDIA_DIR, key);
   fs.mkdirSync(path.dirname(fullPath), { recursive: true });
   fs.writeFileSync(fullPath, buffer);
-  return { storageKey: key, url: `/api/media-local/${key}` };
+  return { storageKey: key, url: `/api/media-local?key=${encodeURIComponent(key)}` };
 }
 
 export function readLocalFile(key) {

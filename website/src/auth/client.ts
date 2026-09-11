@@ -1,5 +1,5 @@
-// Real email/password auth, backed by api/auth/login.js and api/auth/signup.js
-// — same users table and session cookie as Google Sign-In (api/auth/session.js).
+// Real email/password auth, backed by api/auth.js (?action=login/signup)
+// — same users table and session cookie as Google Sign-In (?action=session).
 import { apiFetch } from './api';
 import type { CurrentUser } from './api';
 
@@ -9,7 +9,7 @@ export interface Credentials {
 }
 
 export async function signIn({ email, password }: Credentials): Promise<CurrentUser> {
-  const { user } = await apiFetch<{ user: CurrentUser }>('/api/auth/login', {
+  const { user } = await apiFetch<{ user: CurrentUser }>('/api/auth?action=login', {
     method: 'POST',
     body: JSON.stringify({ email, password }),
   });
@@ -17,7 +17,7 @@ export async function signIn({ email, password }: Credentials): Promise<CurrentU
 }
 
 export async function signUp({ email, password, name }: Credentials & { name?: string }): Promise<CurrentUser> {
-  const { user } = await apiFetch<{ user: CurrentUser }>('/api/auth/signup', {
+  const { user } = await apiFetch<{ user: CurrentUser }>('/api/auth?action=signup', {
     method: 'POST',
     body: JSON.stringify({ email, password, name }),
   });
@@ -29,6 +29,6 @@ export async function signUp({ email, password, name }: Credentials & { name?: s
 // scoped to the now-authenticated user — never a client-fabricated one — so
 // the desktop app's sync calls are backed by an actual credential.
 export async function getDeviceRedirectToken(): Promise<string> {
-  const { token } = await apiFetch<{ token: string }>('/api/auth/device-token', { method: 'POST' });
+  const { token } = await apiFetch<{ token: string }>('/api/auth?action=device-token', { method: 'POST' });
   return token;
 }

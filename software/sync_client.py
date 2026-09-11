@@ -52,7 +52,7 @@ def _require_base_url() -> str:
 def start_pairing() -> dict:
     """Asks the website for a pairing code and opens the browser to approve it."""
     base = _require_base_url()
-    resp = requests.post(f"{base}/api/device/start", timeout=15)
+    resp = requests.post(f"{base}/api/device", params={"action": "start"}, timeout=15)
     resp.raise_for_status()
     data = resp.json()
     code = data["code"]
@@ -62,7 +62,7 @@ def start_pairing() -> dict:
 
 def poll_once(code: str) -> dict:
     base = _require_base_url()
-    resp = requests.get(f"{base}/api/device/poll", params={"code": code}, timeout=15)
+    resp = requests.get(f"{base}/api/device", params={"action": "poll", "code": code}, timeout=15)
     resp.raise_for_status()
     return resp.json()
 
@@ -124,7 +124,8 @@ def sync_session(session: dict) -> Optional[dict]:
     }
     try:
         resp = requests.post(
-            f"{base}/api/me/sync-session",
+            f"{base}/api/me",
+            params={"resource": "sync-session"},
             json=payload,
             headers={"Authorization": f"Bearer {token}"},
             timeout=20,
@@ -172,7 +173,8 @@ def sync_media(
     }
     try:
         resp = requests.post(
-            f"{WEBSITE_API_URL.rstrip('/')}/api/me/media/upload",
+            f"{WEBSITE_API_URL.rstrip('/')}/api/me",
+            params={"resource": "media-upload"},
             json=payload,
             headers={"Authorization": f"Bearer {token}"},
             timeout=60,

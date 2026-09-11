@@ -1,10 +1,10 @@
-// Consolidated device-pairing routes (see api/auth/[...action].js for why).
-// URLs unchanged:
-//   POST /api/device/start
-//   POST /api/device/approve
-//   GET  /api/device/poll?code=...
-import { ensureSchema, requireDb, DbNotConfigured } from '../_lib/db.js';
-import { getAuthedUserId, generateDeviceToken, hashDeviceToken, generatePairingCode } from '../_lib/auth.js';
+// Consolidated device-pairing routes (see api/auth.js for why this is a
+// static filename dispatched by query param, not a bracket route).
+//   POST /api/device?action=start
+//   POST /api/device?action=approve
+//   GET  /api/device?action=poll&code=...
+import { ensureSchema, requireDb, DbNotConfigured } from './_lib/db.js';
+import { getAuthedUserId, generateDeviceToken, hashDeviceToken, generatePairingCode } from './_lib/auth.js';
 
 const EXPIRES_MINUTES = 10;
 
@@ -108,7 +108,7 @@ export default async function handler(req, res) {
     return;
   }
 
-  const action = Array.isArray(req.query.action) ? req.query.action[0] : req.query.action;
+  const action = req.query.action;
 
   try {
     if (action === 'start' && req.method === 'POST') return await handleStart(req, res);
