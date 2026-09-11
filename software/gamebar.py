@@ -226,7 +226,7 @@ class GameBarOverlay:
                 self.visual_memories_tab.minimize_recordings_folder()
 
     def toggle_recap(self):
-        """Toggles the AI Game Recap tab inside the GameBar navbar."""
+        """Toggles the Game Recap tab inside the GameBar navbar."""
         is_rec = bool(self.video_rec and getattr(self.video_rec, "is_recording", False))
         if is_rec and not self.is_recap_open:
             self.show_toast("Recap locked while recording", color="#ff5c5c")
@@ -273,7 +273,7 @@ class GameBarOverlay:
             make_window_invisible_to_capture(self.window)
 
     def open_recap(self):
-        """Opens or expands the AI Game Recap panel immediately."""
+        """Opens or expands the Game Recap panel immediately."""
         if not self.is_open or not self.window or not self.window.winfo_exists():
             self.open(show_recap=True)
         elif not self.is_recap_open:

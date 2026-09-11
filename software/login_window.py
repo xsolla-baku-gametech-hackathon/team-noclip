@@ -1,6 +1,6 @@
 """
 Xsolla Game Recap - Mandatory App Login Window
-Presents a dedicated, desktop-launcher style rectangular window (440x570px)
+Presents a dedicated, desktop-launcher style rectangular window (440x550px)
 requiring user authentication before the in-game Xsolla bar and background detection are unlocked.
 """
 
@@ -45,7 +45,7 @@ class LoginWindow:
 
         # Center on screen
         width = 440
-        height = 580
+        height = 540
         sw = self.window.winfo_screenwidth()
         sh = self.window.winfo_screenheight()
         x = (sw - width) // 2
@@ -153,28 +153,28 @@ class LoginWindow:
 
         tk.Label(
             body,
-            text="AI-Powered Game Save Recap & Memory Vault",
+            text="Gameplay Recaps & Memory Vault",
             font=("Segoe UI", 9),
             fg="#70e1ff",
             bg="#080b10"
         ).pack(pady=(0, 16))
 
-        # Thin Cyberpunk Divider
+        # Thin Divider
         tk.Frame(body, bg="#1a2230", height=1).pack(fill="x", pady=(0, 18))
 
         # Feature Highlights Card
         features_card = tk.Frame(body, bg="#0d1117", highlightthickness=1, highlightbackground="#21262d", padx=16, pady=12)
-        features_card.pack(fill="x", pady=(0, 20))
+        features_card.pack(fill="x", pady=(0, 24))
 
         highlights = [
-            ("🌱", "Save File Telemetry", "Stardew Valley, Undertale, & Auto-Detection"),
-            ("🧠", "OpenRouter AI Recap", "Instant 'Previously On...' narrative & priorities"),
-            ("📸", "In-Game GameBar HUD", "F11 instant screenshots & F9 clip recording")
+            ("🎮", "Universal Game Detection", "Automatically monitors any game you launch"),
+            ("⚡", "Story & Gameplay Recaps", "Instant 'Previously On...' recaps and next goals"),
+            ("📸", "In-Game GameBar HUD", "F11 instant screenshots & F9 video clip recording")
         ]
 
         for icon, title, desc in highlights:
             row = tk.Frame(features_card, bg="#0d1117")
-            row.pack(fill="x", pady=4)
+            row.pack(fill="x", pady=5)
             tk.Label(row, text=icon, font=("Segoe UI", 11), bg="#0d1117").pack(side="left", padx=(0, 8))
             text_frame = tk.Frame(row, bg="#0d1117")
             text_frame.pack(side="left", fill="x", expand=True)
@@ -183,7 +183,7 @@ class LoginWindow:
 
         # Action / Status Section
         self.action_frame = tk.Frame(body, bg="#080b10")
-        self.action_frame.pack(fill="x", pady=(4, 0))
+        self.action_frame.pack(fill="x", pady=(8, 0))
 
         # Big Glowing Primary Login Button
         self.btn_login = tk.Label(
@@ -194,9 +194,9 @@ class LoginWindow:
             bg="#70e1ff",
             cursor="hand2",
             padx=16,
-            pady=12
+            pady=13
         )
-        self.btn_login.pack(fill="x", pady=(0, 10))
+        self.btn_login.pack(fill="x", pady=(0, 12))
         self.btn_login.bind("<Button-1>", lambda e: self._on_browser_login_click())
         self.btn_login.bind("<Enter>", lambda e: self.btn_login.config(bg="#38bdf8"))
         self.btn_login.bind("<Leave>", lambda e: self.btn_login.config(bg="#70e1ff"))
@@ -209,25 +209,7 @@ class LoginWindow:
             fg="#8b949e",
             bg="#080b10"
         )
-        self.status_lbl.pack(pady=(0, 12))
-
-        # Secondary / Demo Access Button
-        btn_guest = tk.Label(
-            self.action_frame,
-            text="⚡ Quick Demo / Guest Access",
-            font=("Segoe UI", 9),
-            fg="#70e1ff",
-            bg="#161b22",
-            cursor="hand2",
-            padx=12,
-            pady=8,
-            highlightthickness=1,
-            highlightbackground="#30363d"
-        )
-        btn_guest.pack(fill="x", pady=(0, 12))
-        btn_guest.bind("<Button-1>", lambda e: self._on_guest_click())
-        btn_guest.bind("<Enter>", lambda e: btn_guest.config(bg="#21262d", fg="#ffffff"))
-        btn_guest.bind("<Leave>", lambda e: btn_guest.config(bg="#161b22", fg="#70e1ff"))
+        self.status_lbl.pack(pady=(0, 16))
 
         # Footer
         tk.Label(
@@ -252,15 +234,8 @@ class LoginWindow:
             base_url=WEBSITE_LOGIN_URL
         )
 
-    def _on_guest_click(self):
-        """Allows instant demo login for hackathon evaluation."""
-        self.btn_login.config(text="✓  AUTHENTICATING GUEST...", bg="#238636", fg="#ffffff")
-        self.status_lbl.config(text="Launching Xsolla Game Recap...", fg="#56d364")
-        self.master.after(400, lambda: self._complete_login("Guest Player", "guest@xsolla.com", "demo_guest_token"))
-
     def _on_auth_success_callback(self, token: str, user: str, email: str):
         """Invoked from auth_server thread when browser callback is received."""
-        # Thread-safe dispatch to Tkinter event loop
         self.master.after(0, lambda: self._show_success_and_unlock(user, email, token))
 
     def _show_success_and_unlock(self, user: str, email: str, token: str):

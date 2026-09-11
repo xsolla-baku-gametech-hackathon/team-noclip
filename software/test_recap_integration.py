@@ -1,8 +1,9 @@
 """
 Unit & Integration Tests for Xsolla Game Recap:
-- Multi-game Save Analyzer (Stardew Valley & Undertale)
-- AI Recap Service & Heuristic Fallback
+- Universal Game Save & Session Analyzer (works for any game)
+- Game Recap Engine & Universal Structured Recaps
 - Local Auth State & Loopback Auth Server Callback Flow
+- Dedicated Login Launcher Window
 """
 
 import unittest
@@ -24,31 +25,32 @@ class TestRecapIntegration(unittest.TestCase):
     def tearDown(self):
         auth_state.log_out()
 
-    def test_stardew_valley_save_analysis(self):
-        res = save_analyzer.analyze_game_save("Stardew Valley")
-        self.assertEqual(res["game_name"], "Stardew Valley")
-        self.assertEqual(res["player_name"], "Aykhan")
-        self.assertIn("Misty Farm", res["farm_name"])
-        self.assertGreaterEqual(res["stats"]["gold"], 10000)
-        self.assertIn("Summer", res["stats"]["season"])
-        self.assertGreaterEqual(len(res["priorities"]), 1)
-        self.assertGreaterEqual(len(res["quests"]), 1)
-
-    def test_undertale_save_analysis(self):
-        res = save_analyzer.analyze_game_save("Undertale")
-        self.assertEqual(res["game_name"], "Undertale")
-        self.assertEqual(res["stats"]["lv"], 1)
-        self.assertIn("Route", res["stats"]["route"])
+    def test_universal_game_save_analysis(self):
+        # Verify analyzer works dynamically for any game
+        res = save_analyzer.analyze_game_save("Elden Ring")
+        self.assertEqual(res["game_name"], "Elden Ring")
+        self.assertIn("stats", res)
+        self.assertIn("events_count", res["stats"])
+        self.assertIn("screenshots_count", res["stats"])
         self.assertGreaterEqual(len(res["priorities"]), 2)
+        self.assertIn("Elden Ring", res["summary"])
 
-    def test_ai_recap_generation(self):
-        save_data = save_analyzer.analyze_game_save("Stardew Valley")
+    def test_multi_game_support(self):
+        games = ["Cyberpunk 2077", "Hades", "Minecraft", "Hollow Knight"]
+        for g in games:
+            analysis = save_analyzer.analyze_game_save(g)
+            self.assertEqual(analysis["game_name"], g)
+            self.assertEqual(analysis["source"], "game_session")
+
+    def test_recap_generation(self):
+        save_data = save_analyzer.analyze_game_save("Cyberpunk 2077")
         recap = ai_recap.generate_recap(save_data)
         self.assertIn("previously_on", recap)
-        self.assertIn("Misty Farm", recap["previously_on"])
+        self.assertIn("Cyberpunk 2077", recap["previously_on"])
         self.assertGreaterEqual(len(recap["what_you_were_up_to"]), 2)
         self.assertGreaterEqual(len(recap["next_objectives"]), 2)
-        self.assertIn("PREVIOUSLY ON", recap["raw_text"])
+        self.assertIn("PREVIOUSLY ON CYBERPUNK 2077", recap["raw_text"])
+        self.assertEqual(recap["source"], "recap_engine")
 
     def test_auth_state_lifecycle(self):
         self.assertFalse(auth_state.is_logged_in())

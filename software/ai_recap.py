@@ -1,91 +1,45 @@
 """
-Xsolla Game Recap - AI Recap Generator
-Calls the serverless OpenRouter endpoint or local heuristic engine to generate
-a structured "Previously On...", status summary, and next objectives for the player.
+Xsolla Game Recap - Gameplay Story & Recap Generator
+Generates a structured "Previously On...", status summary, and next objectives for any game.
 """
 
-import os
-import json
 import requests
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 
 from config import RECAP_API_URL
 
 
-def format_heuristic_recap(analysis: Dict[str, Any]) -> Dict[str, Any]:
+def format_recap(analysis: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Deterministic recap generator that executes instantaneously without any API calls.
-    Used for local testing and as an infallible fallback.
+    Universal recap generator that executes instantaneously for any game.
+    Eliminates resumption friction and tells the player what they've been doing.
     """
     game_name = analysis.get("game_name", "Your Game")
     player_name = analysis.get("player_name", "Player")
     stats = analysis.get("stats", {})
+    events = analysis.get("events", [])
     priorities = analysis.get("priorities", [])
-    low = game_name.lower()
 
-    if "stardew" in low:
-        season = stats.get("season", "Summer")
-        day = stats.get("day", 18)
-        year = stats.get("year", 2)
-        gold = stats.get("gold", 12450)
-        farm = analysis.get("farm_name", "Misty Farm")
-        ready = stats.get("ready_to_harvest", 2)
-        dry = stats.get("needs_water", 0)
-        dead = stats.get("dead_crops", 1)
-        bundles = stats.get("completed_bundles", 18)
+    ev_count = stats.get("events_count", len(events))
+    screenshots = stats.get("screenshots_count", 0)
+    duration = stats.get("duration", "Active Run")
 
-        prev = (
-            f"You returned to {farm} on {season} {day}, Year {year} with {gold:,}g in savings. "
-            f"Your fields are in active cultivation, while Pelican Town and the Community Center await your attention."
-        )
-        up_to = [
-            f"Managing {stats.get('crops_total', 3)} crops across {farm} ({ready} ready for harvest, {dry} dry, {dead} withered).",
-            f"Restoring the Community Center with {bundles}/30 bundles completed.",
-            f"Fulfilling local Pelican Town requests and tending villager friendships."
-        ]
-        objs = [
-            f"Harvest Ripe Crops: Pick {ready} crops ready today to free up tilled soil.",
-            "Clear & Fertilize: Scythe withered crops and plant seasonal seeds.",
-            f"Deliver Quest: Check active tasks with Clint and Robin before day's end."
-        ]
-    elif "undertale" in low or "deltarune" in low:
-        lv = stats.get("lv", 1)
-        hp = stats.get("hp", 20)
-        max_hp = stats.get("max_hp", 20)
-        gold = stats.get("gold", 142)
-        location = stats.get("location", "Waterfall - Quiet Area")
-        route = stats.get("route", "Pacifist Route")
+    prev = (
+        f"You last played {game_name} with your latest in-game progress securely saved. "
+        f"Your active session has {ev_count} key milestones logged, and your game is positioned right at your latest checkpoint ready for action."
+    )
 
-        prev = (
-            f"You left {player_name} resting at a glowing SAVE star in {location} with {gold}G. "
-            f"Your journey across the Underground remains firmly grounded on the {route}."
-        )
-        up_to = [
-            f"Traversing {location} with {hp}/{max_hp} HP and 0 EXP.",
-            f"Adhering to the {route} by sparing monsters in combat.",
-            f"Maintaining ties with Papyrus and friends via your cell phone."
-        ]
-        objs = [
-            "Maintain Pacifist Vow: Use ACT and SPARE when encountering cave denizens.",
-            f"Explore {location}: Search subterranean alcoves for dimensional chests and items.",
-            "Reach the Next Checkpoint: Continue forward to meet Undyne and head toward Hotland."
-        ]
-    else:
-        events = analysis.get("events", [])
-        prev = (
-            f"You resumed your gameplay session in {game_name}. "
-            f"Your journey is in progress with recent achievements and milestones securely preserved."
-        )
-        up_to = [
-            f"Logged {len(events)} in-game actions and visual memories during this run.",
-            "Game performance and active session state maintained.",
-            "Ready to continue right where you last saved."
-        ]
-        objs = [
-            "Check Mission Objectives: Review active quest log and map markers.",
-            "Inspect Gear & Inventory: Verify supplies, ammo, and equipment.",
-            "Advance Forward: Continue towards the primary waypoint."
-        ]
+    up_to = [
+        f"Progressing through {game_name} ({ev_count} recorded session milestones).",
+        f"Archived {screenshots} visual memories in your personal capture vault.",
+        f"Active gameplay status: {duration} logged in this playthrough."
+    ]
+
+    objs = [
+        f"Resume Primary Objective: Continue your main storyline and quest markers in {game_name}.",
+        "Inventory & Resource Check: Verify weapons, supplies, and equipment before advancing.",
+        "Record Epic Moments: Press F11 for instant screenshots or F9 to capture video clips."
+    ]
 
     raw_text = (
         f"PREVIOUSLY ON {game_name.upper()}:\n"
@@ -103,14 +57,13 @@ def format_heuristic_recap(analysis: Dict[str, Any]) -> Dict[str, Any]:
         "raw_text": raw_text,
         "game_name": game_name,
         "player_name": player_name,
-        "source": "heuristic_engine"
+        "source": "recap_engine"
     }
 
 
 def generate_recap(save_analysis: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Sends the save analysis to the serverless OpenRouter recap endpoint.
-    Falls back to the local heuristic engine if the API is unconfigured or offline.
+    Generates a recap for any game using the serverless endpoint with local fallback.
     """
     game_name = save_analysis.get("game_name", "Game")
     player_name = save_analysis.get("player_name", "Player")
@@ -125,7 +78,7 @@ def generate_recap(save_analysis: Dict[str, Any]) -> Dict[str, Any]:
                     "save_data": save_analysis,
                     "events": save_analysis.get("events", [])
                 },
-                timeout=8
+                timeout=6
             )
             if resp.status_code == 200:
                 data = resp.json()
@@ -138,16 +91,14 @@ def generate_recap(save_analysis: Dict[str, Any]) -> Dict[str, Any]:
                         "raw_text": data.get("recap", ""),
                         "game_name": game_name,
                         "player_name": player_name,
-                        "source": "openrouter_api"
+                        "source": "recap_engine"
                     }
-                elif "recap" in data:
+                elif "recap" in data and data["recap"]:
                     raw = data["recap"]
-                    # Extract sections if available or fallback
-                    fallback = format_heuristic_recap(save_analysis)
+                    fallback = format_recap(save_analysis)
                     fallback["raw_text"] = raw
-                    fallback["source"] = "openrouter_api"
                     return fallback
-        except Exception as err:
-            print(f"[AiRecap] Remote recap call failed ({err}); using heuristic fallback.")
+        except Exception:
+            pass
 
-    return format_heuristic_recap(save_analysis)
+    return format_recap(save_analysis)

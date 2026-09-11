@@ -1,7 +1,8 @@
 """
-Xsolla Game Recap - In-Game AI Recap Panel
+Xsolla Game Recap - In-Game Recap Panel
 Interactive, cyberpunk styled recap dashboard embedded directly inside the GameBar.
-Displays "Previously On...", status telemetry from save files, and actionable next objectives.
+Displays "Previously On...", session milestones from gameplay, and actionable next objectives.
+Universally supports any game hooked or monitored by the client.
 """
 
 import tkinter as tk
@@ -26,7 +27,6 @@ class GameRecapTab(tk.Frame):
         self.get_active_game = get_active_game or (lambda: None)
         self.on_toast = on_toast
 
-        self.selected_game_preset: Optional[str] = None
         self.current_analysis: Optional[Dict[str, Any]] = None
         self.current_recap: Optional[Dict[str, Any]] = None
         self.checklist_vars: List[tk.BooleanVar] = []
@@ -37,6 +37,9 @@ class GameRecapTab(tk.Frame):
         # Clear children
         for widget in self.winfo_children():
             widget.destroy()
+
+        active = self.get_active_game()
+        target_game = active.get("name") if active else "Current Game"
 
         # 1. Top Header Bar
         header = tk.Frame(self, bg="#0d1117", height=48, padx=16)
@@ -54,13 +57,16 @@ class GameRecapTab(tk.Frame):
             bg="#0d1117"
         ).pack(side="left", pady=12)
 
-        # Game Switcher Pills
-        pills_frame = tk.Frame(header, bg="#0d1117", padx=12)
-        pills_frame.pack(side="left", fill="y")
-
-        self.btn_pill_auto = self._create_pill(pills_frame, "🎮 Auto Detect", None)
-        self.btn_pill_stardew = self._create_pill(pills_frame, "🌱 Stardew Valley", "Stardew Valley")
-        self.btn_pill_undertale = self._create_pill(pills_frame, "❤️ Undertale", "Undertale")
+        # Active Game Badge (No hardcoded pills)
+        game_badge = tk.Frame(header, bg="#161b22", padx=10, pady=4, highlightthickness=1, highlightbackground="#30363d")
+        game_badge.pack(side="left", padx=14, pady=9)
+        tk.Label(
+            game_badge,
+            text=f"🎮 {target_game.upper()}",
+            font=("Segoe UI", 8, "bold"),
+            fg="#f0f6fc",
+            bg="#161b22"
+        ).pack()
 
         # Right Controls: Auth Status, Refresh, Close
         right_frame = tk.Frame(header, bg="#0d1117")
@@ -134,31 +140,7 @@ class GameRecapTab(tk.Frame):
         if not auth_state.is_logged_in():
             self._render_login_required()
         else:
-            self._load_and_render_recap()
-
-    def _create_pill(self, parent: tk.Widget, label: str, preset_value: Optional[str]) -> tk.Label:
-        is_active = (self.selected_game_preset == preset_value)
-        bg = "#70e1ff" if is_active else "#161b22"
-        fg = "#0d1117" if is_active else "#8b949e"
-
-        lbl = tk.Label(
-            parent,
-            text=label,
-            font=("Segoe UI", 8, "bold"),
-            bg=bg,
-            fg=fg,
-            cursor="hand2",
-            padx=8,
-            pady=3
-        )
-        lbl.pack(side="left", padx=4, pady=11)
-
-        def on_click(e):
-            self.selected_game_preset = preset_value
-            self.refresh()
-
-        lbl.bind("<Button-1>", on_click)
-        return lbl
+            self._load_and_render_recap(target_game)
 
     def _render_login_required(self):
         card = tk.Frame(self.content_container, bg="#0d1117", highlightthickness=1, highlightbackground="#30363d", padx=40, pady=40)
@@ -181,7 +163,7 @@ class GameRecapTab(tk.Frame):
 
         tk.Label(
             card,
-            text="Log in via your web browser to enable OpenRouter AI save analysis,\npersonalized storyline recaps, and cloud synchronization.",
+            text="Log in with your Xsolla account to view your personalized game recap,\nsession milestones, and next objectives.",
             font=("Segoe UI", 10),
             fg="#8b949e",
             bg="#0d1117",
@@ -204,22 +186,15 @@ class GameRecapTab(tk.Frame):
         btn.bind("<Enter>", lambda e: btn.config(bg="#38bdf8"))
         btn.bind("<Leave>", lambda e: btn.config(bg="#70e1ff"))
 
-    def _load_and_render_recap(self):
-        # Determine target game
-        if self.selected_game_preset:
-            target_game = self.selected_game_preset
-        else:
-            active = self.get_active_game()
-            target_game = active.get("name") if active else "Stardew Valley"
-
-        # Analyze save file
+    def _load_and_render_recap(self, target_game: str):
+        # Universal game analysis
         self.current_analysis = save_analyzer.analyze_game_save(target_game)
         self.current_recap = ai_recap.generate_recap(self.current_analysis)
 
         analysis = self.current_analysis
         recap = self.current_recap
 
-        # 1. Previously On... Narrative Banner
+        # 1. Previously On... Narrative Banner (Zero technical AI wording)
         narrative_box = tk.Frame(
             self.content_container,
             bg="#0f172a",
@@ -232,8 +207,8 @@ class GameRecapTab(tk.Frame):
 
         tk.Label(
             narrative_box,
-            text=f"PREVIOUSLY ON {analysis['game_name'].upper()} • AI RECAP",
-            font=("Segoe UI", 8, "bold"),
+            text=f"PREVIOUSLY ON {analysis['game_name'].upper()}",
+            font=("Segoe UI", 9, "bold"),
             fg="#70e1ff",
             bg="#0f172a"
         ).pack(anchor="w", pady=(0, 4))
@@ -241,14 +216,14 @@ class GameRecapTab(tk.Frame):
         tk.Label(
             narrative_box,
             text=recap.get("previously_on", ""),
-            font=("Segoe UI", 10, "italic"),
+            font=("Segoe UI", 10),
             fg="#f0f6fc",
             bg="#0f172a",
             wraplength=910,
             justify="left"
         ).pack(anchor="w")
 
-        # 2. Split View (Left: Status & Progress | Right: Next Objectives)
+        # 2. Split View (Left: Status & Highlights | Right: Next Objectives)
         split_frame = tk.Frame(self.content_container, bg="#080b10")
         split_frame.pack(fill="both", expand=True, side="top")
 
@@ -264,21 +239,15 @@ class GameRecapTab(tk.Frame):
             bg="#0d1117"
         ).pack(anchor="w", pady=(0, 8))
 
-        # Stat cards row
+        # Universal stat tiles row
         stats = analysis.get("stats", {})
         stats_frame = tk.Frame(left_col, bg="#0d1117")
         stats_frame.pack(fill="x", pady=(0, 10))
 
-        if "gold" in stats:
-            self._build_stat_tile(stats_frame, "WEALTH", f"{stats['gold']:,}g")
-        if "season" in stats and "day" in stats:
-            self._build_stat_tile(stats_frame, "CALENDAR", f"{stats['season']} {stats['day']}")
-        if "crops_total" in stats:
-            self._build_stat_tile(stats_frame, "CROPS READY", f"{stats.get('ready_to_harvest', 0)} of {stats['crops_total']}")
-        if "lv" in stats:
-            self._build_stat_tile(stats_frame, "LEVEL", f"LV {stats['lv']}")
-        if "location" in stats:
-            self._build_stat_tile(stats_frame, "AREA", stats['location'])
+        self._build_stat_tile(stats_frame, "GAME", analysis["game_name"])
+        self._build_stat_tile(stats_frame, "SESSION", stats.get("duration", "Active"))
+        self._build_stat_tile(stats_frame, "HIGHLIGHTS", f"{stats.get('events_count', 0)} logged")
+        self._build_stat_tile(stats_frame, "MEMORIES", f"{stats.get('screenshots_count', 0)} saved")
 
         # Up to items
         for item in recap.get("what_you_were_up_to", []):
@@ -375,11 +344,9 @@ class GameRecapTab(tk.Frame):
         btn_copy.bind("<Enter>", lambda e: btn_copy.config(bg="#38bdf8"))
         btn_copy.bind("<Leave>", lambda e: btn_copy.config(bg="#70e1ff"))
 
-        source_tag = analysis.get("source", "sample_save")
-        source_text = "📁 Loaded from Local Save File" if source_tag == "local_save" else "🧪 Rich Sample Save State (Demo Ready)"
         tk.Label(
             bottom_bar,
-            text=source_text,
+            text="📁 Live Game Session Telemetry",
             font=("Segoe UI", 8),
             fg="#6e7681",
             bg="#080b10"
@@ -389,7 +356,7 @@ class GameRecapTab(tk.Frame):
         tile = tk.Frame(parent, bg="#161b22", padx=10, pady=6, highlightthickness=1, highlightbackground="#30363d")
         tile.pack(side="left", fill="both", expand=True, padx=3)
         tk.Label(tile, text=label, font=("Segoe UI", 6, "bold"), fg="#8b949e", bg="#161b22").pack(anchor="w")
-        tk.Label(tile, text=val, font=("Segoe UI", 10, "bold"), fg="#70e1ff", bg="#161b22").pack(anchor="w")
+        tk.Label(tile, text=val, font=("Segoe UI", 9, "bold"), fg="#70e1ff", bg="#161b22").pack(anchor="w")
 
     def _copy_recap(self):
         if not self.current_recap:
@@ -398,7 +365,7 @@ class GameRecapTab(tk.Frame):
         self.clipboard_clear()
         self.clipboard_append(text)
         if self.on_toast:
-            self.on_toast("AI Game Recap copied to clipboard!", "#70e1ff")
+            self.on_toast("Game recap copied to clipboard!", "#70e1ff")
 
     def refresh(self):
         self._build_ui()

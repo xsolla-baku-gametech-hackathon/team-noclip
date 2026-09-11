@@ -3,7 +3,7 @@ Xsolla Game Recap - Main Application Entrypoint
 Coordinates background game detection, right edge fade in toast banner,
 mandatory launcher login window, minimalist in-game GameBar HUD with dim backdrop,
 in-game screenshot capture, MP4 video recording, photo album gallery,
-AI Game Recap by Xsolla, and Windows System Tray navbar icon.
+Game Recap by Xsolla, and Windows System Tray navbar icon.
 """
 
 import sys
@@ -199,7 +199,7 @@ class XsollaGameRecapApp:
         self.gamebar.open(show_album=True)
 
     def _open_game_recap(self):
-        """Opens the GameBar navbar with the AI Game Recap tab expanded."""
+        """Opens the GameBar navbar with the Game Recap tab expanded."""
         if not auth_state.is_logged_in():
             self.login_window.show()
             return

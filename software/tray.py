@@ -2,7 +2,7 @@
 Xsolla Game Recap - System Tray Integration
 Runs the official Xsolla icon in the Windows taskbar notification area.
 Provides right click access to open the GameBar, take a visual memory, view album,
-run AI Game Recap, log in/out, or quit.
+run Game Recap, log in/out, or quit.
 """
 
 import threading

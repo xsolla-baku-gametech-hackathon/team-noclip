@@ -27,9 +27,8 @@ try:
 except ImportError:
     pass
 
-# The desktop app never holds an OpenRouter key itself — it calls this
-# endpoint (a Vercel serverless function that holds the real key server-side)
-# instead. Set this after deploying the website.
+# The desktop app calls this cloud recap service endpoint (a serverless function
+# that generates recaps server-side). Set this after deploying the website.
 RECAP_API_URL = os.getenv("RECAP_API_URL", "https://team-noclip.vercel.app/api/recap")
 
 # Where the login button opens in the browser.

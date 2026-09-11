@@ -1,13 +1,11 @@
-// Vercel Serverless Function — holds the OpenRouter key server-side only.
-// Set OPENROUTER_API_KEY (and optionally OPENROUTER_MODEL) as Environment
-// Variables in the Vercel project dashboard — never commit them here. This
-// keeps the key out of the desktop app / .exe entirely.
+// Vercel Serverless Function — Xsolla Game Recap Engine
+// Holds API configuration server-side only, never shipping in the client binary.
 
-const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
+const RECAP_SERVICE_URL = process.env.RECAP_SERVICE_URL || 'https://openrouter.ai/api/v1/chat/completions';
 const DEFAULT_MODEL = 'openai/gpt-4o-mini';
 
 function buildPrompt(gameName, playerName, saveData, events) {
-  const saveSummary = saveData ? JSON.stringify(saveData, null, 2) : 'No save file data available';
+  const saveSummary = saveData ? JSON.stringify(saveData, null, 2) : 'No save data available';
   const eventLines = (events || [])
     .map((e) => {
       const time = e.timestamp || e.time || '';
@@ -17,10 +15,10 @@ function buildPrompt(gameName, playerName, saveData, events) {
     .join('\n') || '(no recent session events)';
 
   return [
-    `You are the official Xsolla Game Recap AI engine. You act as a personalized, context-aware memory bridge for a player returning to "${gameName || 'their game'}" after time away.`,
+    `You are the official Xsolla Game Recap engine. You act as a personalized, context-aware memory bridge for a player returning to "${gameName || 'their game'}" after time away.`,
     `Player name: ${playerName || 'Player'}`,
     '',
-    'SAVE FILE & GAME STATE:',
+    'GAME & SESSION STATE:',
     saveSummary,
     '',
     'RECENT HIGHLIGHT EVENTS:',
@@ -28,76 +26,35 @@ function buildPrompt(gameName, playerName, saveData, events) {
     '',
     'INSTRUCTIONS:',
     'Write a concise, high-energy gaming recap with 3 sections:',
-    '1. PREVIOUSLY ON: Exactly 2-3 engaging narrative sentences summarizing temporal, economic, and storyline state where the player left off.',
-    '2. WHAT YOU WERE UP TO: Exactly 3 bullet points detailing current progress, farm/world conditions, and key stats.',
+    '1. PREVIOUSLY ON: Exactly 2-3 engaging narrative sentences summarizing progress, storyline state, and checkpoint where the player left off.',
+    '2. WHAT YOU WERE UP TO: Exactly 3 bullet points detailing current progress, in-game achievements, and status.',
     '3. NEXT OBJECTIVES: Exactly 3 prioritized, actionable tasks the player should tackle right now upon resuming gameplay.',
     '',
     'Keep it punchy, accurate to the provided data, and formatted cleanly with clear headers.'
   ].join('\n');
 }
 
-function generateHeuristicFallback(gameName, playerName, saveData, events) {
-  const name = playerName || saveData?.player_name || 'Player';
-  const stats = saveData?.stats || {};
-  const priorities = saveData?.priorities || [];
+function generateUniversalFallback(gameName, playerName, saveData, events) {
+  const game = gameName || 'Your Game';
+  const evCount = events?.length || saveData?.stats?.events_count || 0;
+  const screenshots = saveData?.stats?.screenshots_count || 0;
 
-  let previouslyOn = '';
-  let whatYouWereUpTo = [];
-  let nextObjectives = [];
+  const previouslyOn = `You returned to ${game} with your latest in-game progress and session milestones securely preserved. Your run is ready to resume right where you saved.`;
 
-  const lowerGame = (gameName || '').toLowerCase();
+  const whatYouWereUpTo = [
+    `Actively playing ${game} with ${evCount} session milestones logged.`,
+    `Archived ${screenshots} visual memories in your personal capture vault.`,
+    `Character checkpoint and gameplay state ready to continue.`
+  ];
 
-  if (lowerGame.includes('stardew')) {
-    const season = stats.season || 'Summer';
-    const day = stats.day || 18;
-    const year = stats.year || 2;
-    const gold = (stats.gold || 12450).toLocaleString();
-    const farmName = saveData?.farm_name || 'Misty Farm';
-
-    previouslyOn = `You returned to ${farmName} on ${season} ${day}, Year ${year} with ${gold}g in savings. Your farm is thriving with active crops, while Pelican Town and the Community Center await your next move.`;
-    whatYouWereUpTo = [
-      `Tending crops across ${farmName} (${stats.ready_to_harvest || 2} ready to harvest, ${stats.needs_water || 0} dry).`,
-      `Community Center restoration underway (${stats.completed_bundles || 18}/30 bundles restored).`,
-      `Maintaining connections with townspeople and active community requests.`
-    ];
-    nextObjectives = (priorities.length ? priorities : [
-      { title: 'Harvest Ripe Crops', description: 'Collect ripe crops before the day ends.' },
-      { title: 'Check Community Center', description: 'Donate required seasonal items to unlock bundles.' },
-      { title: 'Visit Town Bulletin Board', description: 'Take on active villager requests at Pierre\'s store.' }
-    ]).map(p => `${p.title}: ${p.description}`);
-  } else if (lowerGame.includes('undertale') || lowerGame.includes('deltarune')) {
-    const lv = stats.lv || 1;
-    const location = stats.location || 'Waterfall';
-    const gold = stats.gold || 142;
-    const route = stats.route || 'Pacifist Route';
-
-    previouslyOn = `You left ${name} resting at a SAVE star in ${location} at LV ${lv} with ${gold}G. Your journey through the Underground remains firmly on the ${route}.`;
-    whatYouWereUpTo = [
-      `Exploring ${location} while conserving items and staying determined.`,
-      `Holding 0 EXP and LV ${lv} in adherence to the ${route}.`,
-      `Keeping in touch with Papyrus and friends via Cell Phone.`
-    ];
-    nextObjectives = [
-      'Maintain Pacifist Stance: Spare or ACT with monsters without dealing lethal damage.',
-      'Explore Local Passages: Check hidden rooms for dimensional boxes and healing treats.',
-      'Reach the Next Checkpoint: Advance through the caverns to the next SAVE star.'
-    ];
-  } else {
-    previouslyOn = `You resumed your session in ${gameName || 'your game'}. Your journey is active with recent milestones logged and ready to resume.`;
-    whatYouWereUpTo = [
-      `Active session with ${events?.length || 0} recorded gameplay events.`,
-      `Progress intact with latest checkpoints preserved.`,
-      `Ready to jump back into action right where you saved.`
-    ];
-    nextObjectives = [
-      'Review Active Objectives: Check the quest journal or map markers.',
-      'Inventory Check: Replenish supplies, ammo, and healing items.',
-      'Continue Main Storyline: Head to the primary waypoint.'
-    ];
-  }
+  const nextObjectives = [
+    `Resume Primary Quest: Continue your main storyline objectives in ${game}.`,
+    `Inventory & Supply Check: Verify your equipment, items, and resources.`,
+    `Capture Highlights: Press F11 for instant screenshots or F9 to capture video clips.`
+  ];
 
   const recapText = [
-    `PREVIOUSLY ON ${gameName ? gameName.toUpperCase() : 'YOUR GAME'}:`,
+    `PREVIOUSLY ON ${game.toUpperCase()}:`,
     previouslyOn,
     '',
     'WHAT YOU WERE UP TO:',
@@ -134,30 +91,29 @@ export default async function handler(req, res) {
 
   const { game_name, player_name, save_data, events } = req.body || {};
 
-  const apiKey = process.env.OPENROUTER_API_KEY;
+  const apiKey = process.env.RECAP_API_KEY || process.env.OPENROUTER_API_KEY;
   if (!apiKey) {
-    // Intelligent fallback when OPENROUTER_API_KEY is not configured
-    const fallback = generateHeuristicFallback(game_name, player_name, save_data, events);
+    const fallback = generateUniversalFallback(game_name, player_name, save_data, events);
     res.status(200).json(fallback);
     return;
   }
 
   try {
-    const upstream = await fetch(OPENROUTER_URL, {
+    const model = process.env.RECAP_MODEL || process.env.OPENROUTER_MODEL || DEFAULT_MODEL;
+    const upstream = await fetch(RECAP_SERVICE_URL, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: process.env.OPENROUTER_MODEL || DEFAULT_MODEL,
+        model,
         messages: [{ role: 'user', content: buildPrompt(game_name, player_name, save_data, events) }],
       }),
     });
 
     if (!upstream.ok) {
-      console.warn(`[recap.js] OpenRouter returned ${upstream.status}. Using fallback.`);
-      const fallback = generateHeuristicFallback(game_name, player_name, save_data, events);
+      const fallback = generateUniversalFallback(game_name, player_name, save_data, events);
       res.status(200).json(fallback);
       return;
     }
@@ -166,15 +122,14 @@ export default async function handler(req, res) {
     const recap = data?.choices?.[0]?.message?.content?.trim();
 
     if (!recap) {
-      const fallback = generateHeuristicFallback(game_name, player_name, save_data, events);
+      const fallback = generateUniversalFallback(game_name, player_name, save_data, events);
       res.status(200).json(fallback);
       return;
     }
 
     res.status(200).json({ recap });
   } catch (err) {
-    console.error(`[recap.js] Error: ${err.message}. Using fallback.`);
-    const fallback = generateHeuristicFallback(game_name, player_name, save_data, events);
+    const fallback = generateUniversalFallback(game_name, player_name, save_data, events);
     res.status(200).json(fallback);
   }
 }
