@@ -1,5 +1,5 @@
 import { Outlet, NavLink, Link, useNavigate } from 'react-router-dom';
-import { LayoutGrid, Gamepad2, Sparkles, Image, Share2, LogOut } from 'lucide-react';
+import { LayoutGrid, Gamepad2, Sparkles, Image, Share2, Settings as SettingsIcon, LogOut } from 'lucide-react';
 import type { CurrentUser } from '../auth/api';
 import { logout } from '../auth/api';
 import { clearSession } from '../auth/session';
@@ -16,6 +16,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Recaps', to: '/app/recaps', icon: Sparkles },
   { label: 'Media', to: '/app/media', icon: Image },
   { label: 'Cloud Sharing', to: '/app/sharing', icon: Share2 },
+  { label: 'Settings', to: '/app/settings', icon: SettingsIcon },
 ];
 
 const AppShell = ({ user }: { user: CurrentUser }) => {

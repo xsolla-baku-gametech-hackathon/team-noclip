@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Optional, Dict, Callable
 import cv2
 import numpy as np
-from config import RECORDINGS_DIR, ensure_data_dir
+from config import RECORDINGS_DIR, ensure_data_dir, get_recording_settings
 from capture_utils import grab_screen_with_cursor
 
 
@@ -180,7 +180,10 @@ class VideoRecorderService:
                 self.on_state_change(False, "00:00")
             return
 
-        target_fps = 20.0
+        rec_settings = get_recording_settings()
+        target_fps = float(rec_settings.get("recording_fps", 30))
+        if target_fps <= 0:
+            target_fps = 30.0
         frame_interval = 1.0 / target_fps
         fourcc = cv2.VideoWriter_fourcc(*'mp4v')
         writer = cv2.VideoWriter(str(self.current_filepath), fourcc, target_fps, (w, h))
