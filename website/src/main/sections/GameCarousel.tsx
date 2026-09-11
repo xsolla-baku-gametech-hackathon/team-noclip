@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
-import { motion, useReducedMotion, type PanInfo } from 'framer-motion';
+import { useState, useEffect, useCallback, useRef, type ComponentProps } from 'react';
+import { motion, useReducedMotion } from 'framer-motion';
 import { Flame, ChevronLeft, ChevronRight, Pickaxe, Sword, Leaf, Skull, Eye, type LucideIcon } from 'lucide-react';
 import CTAButton from '../components/CTAButton';
 
@@ -124,9 +124,22 @@ const GameCarousel = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [goPrev, goNext]);
 
-  const handleDragEnd = (_e: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
+  const suppressClickRef = useRef(false);
+
+  const handleDragEnd: NonNullable<ComponentProps<typeof motion.div>['onDragEnd']> = (_e, info) => {
+    if (Math.abs(info.offset.x) > 5) {
+      suppressClickRef.current = true;
+      requestAnimationFrame(() => {
+        suppressClickRef.current = false;
+      });
+    }
     if (info.offset.x < -DRAG_THRESHOLD) goNext();
     else if (info.offset.x > DRAG_THRESHOLD) goPrev();
+  };
+
+  const handleCardClick = (index: number, isActive: boolean) => {
+    if (suppressClickRef.current || isActive) return;
+    goTo(index);
   };
 
   const transition = reduceMotion
@@ -174,7 +187,7 @@ const GameCarousel = () => {
               }}
               style={{ zIndex: transform.zIndex }}
               transition={transition}
-              onClick={() => !isActive && goTo(index)}
+              onClick={() => handleCardClick(index, isActive)}
             >
               <div className="relative h-44 sm:h-52 shrink-0 overflow-hidden">
                 <img

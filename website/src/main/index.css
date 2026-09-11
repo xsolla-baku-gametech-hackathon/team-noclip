@@ -461,6 +461,24 @@
   opacity: 0;
 }
 
+/* ===== AUTH GRAPHIC SPOTLIGHT (desktop, fine-pointer only) ===== */
+.graphic-spotlight {
+  --spot-x: 50%;
+  --spot-y: 50%;
+  opacity: 0;
+  background: radial-gradient(circle 220px at var(--spot-x) var(--spot-y), rgba(255, 255, 255, 0.18), transparent 70%);
+  transition: opacity 0.3s ease;
+  pointer-events: none;
+}
+.dark .graphic-spotlight {
+  background: radial-gradient(circle 220px at var(--spot-x) var(--spot-y), rgba(128, 232, 248, 0.14), transparent 70%);
+}
+@media (hover: hover) and (pointer: fine) {
+  .graphic-spotlight {
+    opacity: 1;
+  }
+}
+
 /* ===== AUTH FORM FIELD REVEAL ===== */
 @keyframes fieldReveal {
   from {
@@ -522,8 +540,6 @@
 
 /* ===== REDUCED MOTION ===== */
 @media (prefers-reduced-motion: reduce) {
-  .splash-box-top,
-  .splash-box-bottom,
   .hero-image-animate,
   .word-reveal,
   .cta-animate,
@@ -534,5 +550,20 @@
     opacity: 1 !important;
     transform: none !important;
     filter: none !important;
+  }
+
+  /* These start covering the screen and animate AWAY — reduced motion must
+     land on that end state, not freeze them mid-cover. */
+  .splash-box-top {
+    animation: none !important;
+    transform: translateY(-100%) !important;
+  }
+  .splash-box-bottom {
+    animation: none !important;
+    transform: translateY(100%) !important;
+  }
+
+  .graphic-spotlight {
+    display: none !important;
   }
 }
