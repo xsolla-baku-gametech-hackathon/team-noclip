@@ -1,0 +1,14 @@
+C:\Users\loq\team-noclip\XsollaGameRecap\obj\Debug\net6.0\XsollaGameRecap.csproj.AssemblyReference.cache
+C:\Users\loq\team-noclip\XsollaGameRecap\obj\Debug\net6.0\XsollaGameRecap.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\loq\team-noclip\XsollaGameRecap\obj\Debug\net6.0\XsollaGameRecap.csproj.CoreCompileInputs.cache
+C:\Users\loq\team-noclip\XsollaGameRecap\obj\Debug\net6.0\XsollaGameRecap.sourcelink.json
+C:\Users\loq\team-noclip\XsollaGameRecap\bin\Debug\net6.0\XsollaGameRecap.deps.json
+C:\Users\loq\team-noclip\XsollaGameRecap\bin\Debug\net6.0\XsollaGameRecap.dll
+C:\Users\loq\team-noclip\XsollaGameRecap\obj\Debug\net6.0\XsollaGameRecap.dll
+C:\Users\loq\team-noclip\stardew_walley\XsollaGameRecap\bin\Debug\net6.0\XsollaGameRecap.deps.json
+C:\Users\loq\team-noclip\stardew_walley\XsollaGameRecap\bin\Debug\net6.0\XsollaGameRecap.dll
+C:\Users\loq\team-noclip\stardew_walley\XsollaGameRecap\obj\Debug\net6.0\XsollaGameRecap.csproj.AssemblyReference.cache
+C:\Users\loq\team-noclip\stardew_walley\XsollaGameRecap\obj\Debug\net6.0\XsollaGameRecap.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\loq\team-noclip\stardew_walley\XsollaGameRecap\obj\Debug\net6.0\XsollaGameRecap.csproj.CoreCompileInputs.cache
+C:\Users\loq\team-noclip\stardew_walley\XsollaGameRecap\obj\Debug\net6.0\XsollaGameRecap.sourcelink.json
+C:\Users\loq\team-noclip\stardew_walley\XsollaGameRecap\obj\Debug\net6.0\XsollaGameRecap.dll

@@ -1,0 +1,19 @@
+{
+  "app_name": "Xsolla Game Recap",
+  "version": "1.2.0",
+  "hotkey": "Ctrl+Shift+X",
+  "hotkey_alt": "Alt+X",
+  "toast_duration_ms": 3200,
+  "enable_toast_sound": true,
+  "scan_interval_sec": 1.0,
+  "smart_heuristic_detection": true,
+  "saas_api_url": "http://localhost:3000/api/recap",
+  "saas_api_token": "xsolla_baku_token",
+  "custom_apps": [
+    {
+      "id": "hello_neighbor_standalone",
+      "name": "Hello Neighbor Standalone",
+      "executable": "helloneighbor.exe"
+    }
+  ]
+}
