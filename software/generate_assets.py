@@ -12,69 +12,64 @@ ASSETS_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def create_xsolla_icon():
+    """Generates official-grade robot mascot assets and multi-size Windows .ico."""
+    trans_path = ASSETS_DIR / "xsolla_transparent.png"
+    if trans_path.exists():
+        import numpy as np
+        from scipy.ndimage import label
+
+        img = Image.open(str(trans_path))
+        arr = np.array(img)
+        arr_alpha = arr[:, :, 3] > 10
+        labeled, num = label(arr_alpha)
+        # Component 1 (body) and 6, 7 (eyes)
+        robot_mask = (labeled == 1) | (labeled == 6) | (labeled == 7)
+        arr_robot = arr.copy()
+        arr_robot[~robot_mask] = 0
+        y_indices, x_indices = np.where(robot_mask)
+        cropped = arr_robot[y_indices.min():y_indices.max() + 1, x_indices.min():x_indices.max() + 1]
+        h, w, c = cropped.shape
+
+        # Create centered square canvas with subtle padding
+        max_dim = max(w, h) + 8
+        sq_arr = np.zeros((max_dim, max_dim, 4), dtype=np.uint8)
+        y_off = (max_dim - h) // 2
+        x_off = (max_dim - w) // 2
+        sq_arr[y_off:y_off + h, x_off:x_off + w] = cropped
+
+        robot_img = Image.fromarray(sq_arr)
+        robot_256 = robot_img.resize((256, 256), Image.Resampling.LANCZOS)
+
+        # Save clean mascot PNGs
+        clean_path = ASSETS_DIR / "xsolla_mascot_clean.png"
+        robot_path = ASSETS_DIR / "xsolla_robot_mascot.png"
+        emblem_path = ASSETS_DIR / "xsolla_emblem.png"
+
+        robot_256.save(str(clean_path), "PNG")
+        robot_256.save(str(robot_path), "PNG")
+        robot_256.save(str(emblem_path), "PNG")
+        print(f"[Assets] Created clean robot mascot PNGs: {clean_path}")
+
+        # Save Multi-Resolution Windows ICO from the robot mascot
+        ico_path = ASSETS_DIR / "xsolla_icon.ico"
+        sizes = [(16, 16), (24, 24), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)]
+        robot_256.save(str(ico_path), format="ICO", sizes=sizes)
+        print(f"[Assets] Created multi-size Windows robot icon: {ico_path}")
+        return
+
+    # Fallback if transparent source is missing
     size = 256
     img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
-
-    # 1. Dark Rounded Squircle Base (#0c0e14 with #1b2130 border)
     margin = 8
-    draw.rounded_rectangle(
-        [margin, margin, size - margin, size - margin],
-        radius=48,
-        fill="#0d1117",
-        outline="#ff0055",
-        width=4
-    )
-
-    # Subtle inner glow line
-    draw.rounded_rectangle(
-        [margin + 4, margin + 4, size - margin - 4, size - margin - 4],
-        radius=44,
-        outline="#242c3d",
-        width=2
-    )
-
-    # 2. Iconic Geometric Xsolla "X" (Signature vibrant crimson & cyan cuts)
-    # Left diagonal stroke (Red/Crimson #ff0055)
-    poly_left = [
-        (62, 54),
-        (104, 54),
-        (194, 202),
-        (152, 202)
-    ]
-    draw.polygon(poly_left, fill="#ff0055")
-
-    # Right diagonal stroke (Deep Coral #ff3366 with white highlight cut)
-    poly_right_top = [
-        (194, 54),
-        (152, 54),
-        (116, 114),
-        (138, 132)
-    ]
-    draw.polygon(poly_right_top, fill="#ffffff")
-
-    poly_right_bot = [
-        (118, 124),
-        (140, 142),
-        (104, 202),
-        (62, 202)
-    ]
-    draw.polygon(poly_right_bot, fill="#00f5d4")
-
-    # 3. Center Cyber Accent
-    draw.ellipse([118, 118, 138, 138], fill="#ff0055", outline="#ffffff", width=2)
-
-    # Save PNG
-    png_path = ASSETS_DIR / "xsolla_logo.png"
+    draw.rounded_rectangle([margin, margin, size - margin, size - margin], radius=48, fill="#0d1117", outline="#70e1ff", width=4)
+    png_path = ASSETS_DIR / "xsolla_mascot_clean.png"
     img.save(str(png_path), "PNG")
-    print(f"[Assets] Created {png_path}")
-
-    # Save Multi-Resolution Windows ICO
     ico_path = ASSETS_DIR / "xsolla_icon.ico"
-    sizes = [(16, 16), (24, 24), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)]
-    img.save(str(ico_path), format="ICO", sizes=sizes)
-    print(f"[Assets] Created multi-size Windows icon: {ico_path}")
+    img.save(str(ico_path), format="ICO", sizes=[(64, 64), (128, 128), (256, 256)])
+    print(f"[Assets] Created fallback icon: {ico_path}")
 
 
 if __name__ == "__main__":
     create_xsolla_icon()
+

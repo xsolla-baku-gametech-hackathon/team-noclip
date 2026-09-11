@@ -68,6 +68,53 @@ class TestXsollaGameRecap(unittest.TestCase):
         self.assertIsNone(mgr.current_session)
         self.assertEqual(completed["game_name"], "Hello Neighbor")
 
+    def test_robot_mascot_favicon(self):
+        from config import ASSETS_DIR
+        from PIL import Image
+        mascot_path = ASSETS_DIR / "xsolla_mascot_clean.png"
+        self.assertTrue(mascot_path.exists(), "xsolla_mascot_clean.png must exist")
+        with Image.open(str(mascot_path)) as img:
+            self.assertEqual(img.mode, "RGBA")
+            self.assertGreater(img.width, 0)
+            self.assertGreater(img.height, 0)
+
+    def test_recording_file_lock(self):
+        from unittest.mock import MagicMock
+        from album_viewer import VisualMemoriesTab
+        from gamebar import GameBarOverlay
+
+        mock_recorder = MagicMock()
+        mock_recorder.is_recording = True
+
+        tab = VisualMemoriesTab.__new__(VisualMemoriesTab)
+        tab.video_recorder = mock_recorder
+        tab.subtitle_lbl = None
+        tab.on_open_folder = None
+        tab._show_recording_locked_toast = MagicMock()
+        tab._show_photo_viewer = MagicMock()
+        tab._show_video_player = MagicMock()
+
+        # Attempt to open media during recording
+        fake_path = Path("fake_clip.mp4")
+        tab._open_media(fake_path)
+        tab._show_recording_locked_toast.assert_called_once()
+        tab._show_video_player.assert_not_called()
+        tab._show_photo_viewer.assert_not_called()
+
+        # Attempt to open folder during recording
+        tab._show_recording_locked_toast.reset_mock()
+        tab._open_recordings_folder()
+        tab._show_recording_locked_toast.assert_called_once()
+
+        # GameBar toggle_album during recording
+        gamebar = GameBarOverlay.__new__(GameBarOverlay)
+        gamebar.video_rec = mock_recorder
+        gamebar.is_album_open = False
+        gamebar.show_toast = MagicMock()
+        gamebar.toggle_album()
+        gamebar.show_toast.assert_called_once()
+        self.assertFalse(gamebar.is_album_open)
+
 
 if __name__ == "__main__":
     unittest.main()

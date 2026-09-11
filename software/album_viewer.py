@@ -403,6 +403,9 @@ class VisualMemoriesTab(tk.Frame):
 
     def _on_folder_btn_click(self):
         """Called when user clicks 'Open Folder'. Delegates to custom handler or opens directly."""
+        if self.video_recorder and getattr(self.video_recorder, "is_recording", False):
+            self._show_recording_locked_toast("Cannot open folder while recording is in progress")
+            return
         if self.on_open_folder:
             try:
                 self.on_open_folder()
@@ -512,6 +515,10 @@ class VisualMemoriesTab(tk.Frame):
         Ensures debouncing against accidental double/triple clicks and tracks the specific
         Explorer window so minimization and quitting are strictly scoped to it.
         """
+        if self.video_recorder and getattr(self.video_recorder, "is_recording", False):
+            self._show_recording_locked_toast("Cannot open folder while recording is in progress")
+            return
+
         import time
         import ctypes
         user32 = ctypes.windll.user32
@@ -605,8 +612,25 @@ class VisualMemoriesTab(tk.Frame):
 
         self.after(100, lambda: _locate_and_elevate(0))
 
+    def _show_recording_locked_toast(self, message: str):
+        """Displays high-visibility alert toast preventing media access during recording."""
+        try:
+            import winsound
+            winsound.MessageBeep(winsound.MB_ICONEXCLAMATION)
+        except Exception:
+            pass
+        if hasattr(self, "subtitle_lbl") and self.subtitle_lbl and self.subtitle_lbl.winfo_exists():
+            orig_text = self.subtitle_lbl.cget("text")
+            orig_fg = self.subtitle_lbl.cget("fg")
+            self.subtitle_lbl.config(text=f"⚠️ {message.upper()}", fg="#ff5c5c")
+            self.after(3000, lambda: self.subtitle_lbl.config(text=orig_text, fg=orig_fg) if self.subtitle_lbl and self.subtitle_lbl.winfo_exists() else None)
+
     def _open_media(self, media_path: Path):
         """Opens a media file directly in-overlay (in-game photo viewer or video player)."""
+        if self.video_recorder and getattr(self.video_recorder, "is_recording", False):
+            self._show_recording_locked_toast("Cannot open files while recording is in progress")
+            return
+
         is_video = media_path.suffix.lower() in ('.mp4', '.mkv', '.avi', '.mov')
         if is_video:
             self._show_video_player(media_path)
@@ -1353,6 +1377,18 @@ class VisualMemoriesTab(tk.Frame):
         self._target_scroll_y = 0.0
 
         all_memories = self.polaroid_svc.get_recent_memories(limit=100)
+
+        # Exclude active recording file from gallery and playlist to prevent cv2 read/write collisions
+        is_currently_recording = bool(self.video_recorder and getattr(self.video_recorder, "is_recording", False))
+        if is_currently_recording:
+            active_file = getattr(self.video_recorder, "current_filepath", None)
+            if active_file:
+                try:
+                    res_active = Path(active_file).resolve()
+                    all_memories = [p for p in all_memories if p.resolve() != res_active]
+                except Exception:
+                    pass
+
         photos = [p for p in all_memories if p.suffix.lower() in ('.png', '.jpg', '.jpeg')]
         videos = [p for p in all_memories if p.suffix.lower() in ('.mp4', '.mkv', '.avi', '.mov')]
 
@@ -1379,9 +1415,16 @@ class VisualMemoriesTab(tk.Frame):
             empty_desc = "Press [F11] for screenshot or [F9] for video recording in any game!"
 
         if self.subtitle_lbl and self.subtitle_lbl.winfo_exists():
-            self.subtitle_lbl.config(
-                text=f"Showing {len(items_to_display)} items • Click to view photo or play video clip • [F11] Snap • [F9] Rec"
-            )
+            if is_currently_recording:
+                self.subtitle_lbl.config(
+                    text="🔴 RECORDING IN PROGRESS — File opening locked until recording stops",
+                    fg="#ff5c5c"
+                )
+            else:
+                self.subtitle_lbl.config(
+                    text=f"Showing {len(items_to_display)} items • Click to view photo or play video clip • [F11] Snap • [F9] Rec",
+                    fg="#8b949e"
+                )
 
         if not items_to_display:
             empty_box = tk.Frame(self.scroll_frame, bg="#080b10", pady=70)
@@ -1439,9 +1482,15 @@ class VisualMemoriesTab(tk.Frame):
                 tk_thumb = ImageTk.PhotoImage(pil_img)
                 self._thumbnails.append(tk_thumb)
 
+                def _handle_card_click(p=media_path):
+                    if self.video_recorder and getattr(self.video_recorder, "is_recording", False):
+                        self._show_recording_locked_toast("Cannot open file while recording is in progress")
+                        return
+                    self._open_media(p)
+
                 img_lbl = tk.Label(card_box, image=tk_thumb, bg="#0f141f", cursor="hand2")
                 img_lbl.pack()
-                img_lbl.bind("<Button-1>", lambda e, p=media_path: self._open_media(p))
+                img_lbl.bind("<Button-1>", lambda e, p=media_path: _handle_card_click(p))
 
                 footer_bar = tk.Frame(card_box, bg="#0f141f", pady=5)
                 footer_bar.pack(fill="x")
@@ -1479,7 +1528,7 @@ class VisualMemoriesTab(tk.Frame):
                     )
 
                 btn_act.pack(side="right")
-                btn_act.bind("<Button-1>", lambda e, p=media_path: self._open_media(p))
+                btn_act.bind("<Button-1>", lambda e, p=media_path: _handle_card_click(p))
 
             except Exception as err:
                 print(f"[Album] Error loading {media_path}: {err}")

@@ -32,9 +32,11 @@ class SystemTrayIcon:
         self._thread: Optional[threading.Thread] = None
 
     def _load_icon_image(self) -> Image.Image:
-        icon_path = ASSETS_DIR / "xsolla_emblem.png"
+        icon_path = ASSETS_DIR / "xsolla_mascot_clean.png"
         if not icon_path.exists():
-            icon_path = ASSETS_DIR / "xsolla_logo.png"
+            icon_path = ASSETS_DIR / "xsolla_robot_mascot.png"
+        if not icon_path.exists():
+            icon_path = ASSETS_DIR / "xsolla_emblem.png"
 
         try:
             img = Image.open(str(icon_path)).convert("RGBA")
