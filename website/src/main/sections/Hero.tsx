@@ -1,4 +1,3 @@
-import { useNavigate } from 'react-router-dom';
 import CTAButton from '../components/CTAButton';
 import WordReveal from '../components/WordReveal';
 import SpotlightReveal from '../components/SpotlightReveal';
@@ -11,8 +10,6 @@ const REVEAL_IMAGE =
 const HEADLINE = 'I build compelling visual stories & motion that make ideas shine.';
 
 const Hero = () => {
-  const navigate = useNavigate();
-
   return (
     <main className="hero relative w-full overflow-hidden bg-studio-bg min-h-screen md:h-screen md:min-h-[800px]">
       <div className="hero-big-text creator-text-animate absolute -bottom-[30px] md:-bottom-10 left-0 right-0 z-[2] pointer-events-none w-full text-center">
@@ -29,12 +26,6 @@ const Hero = () => {
           />
           <div className="flex flex-wrap items-center gap-4">
             <CTAButton label="Install Xsolla Game Recap" size="large" className="cta-animate" />
-            <button
-              onClick={() => navigate('/login')}
-              className="px-6 py-3.5 rounded-full bg-[#70e1ff] text-[#0d1117] font-bold text-[14px] hover:bg-[#38bdf8] transition-all flex items-center gap-2 shadow-lg shadow-[#70e1ff]/20 cursor-pointer"
-            >
-              <span>✨</span> Game Recap by Xsolla
-            </button>
           </div>
         </div>
       </div>
