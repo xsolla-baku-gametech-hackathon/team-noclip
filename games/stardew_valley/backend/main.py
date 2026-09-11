@@ -1,5 +1,7 @@
 import logging
-from fastapi import FastAPI, HTTPException, UploadFile, File
+import secrets
+
+from fastapi import Depends, FastAPI, Header, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.config import settings
@@ -99,9 +101,15 @@ async def generate_recap_from_xml(file: UploadFile = File(...)):
         raise HTTPException(status_code=400, detail=f"Failed to parse save XML: {str(e)}")
 
 
-@app.post("/api/cache/clear")
+def require_admin_key(x_api_key: str = Header(default="")):
+    """Requires a valid X-API-Key header matching ADMIN_API_KEY for admin-only endpoints."""
+    if not settings.ADMIN_API_KEY or not secrets.compare_digest(x_api_key, settings.ADMIN_API_KEY):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+
+@app.post("/api/cache/clear", dependencies=[Depends(require_admin_key)])
 def clear_cache():
-    """Clears all cached recap entries."""
+    """Clears all cached recap entries. Requires admin authentication."""
     cache_service.clear()
     return {"status": "cleared", "cached_entries": 0}
 

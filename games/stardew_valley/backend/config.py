@@ -34,5 +34,6 @@ class Settings:
     APP_HOST: str = os.getenv("APP_HOST", "127.0.0.1")
     ENABLE_LLM: bool = os.getenv("ENABLE_LLM", "true").lower() in ("true", "1", "yes")
     HTTP_TIMEOUT_SECONDS: float = _get_env_float("HTTP_TIMEOUT_SECONDS", 5.0)
+    ADMIN_API_KEY: str = os.getenv("ADMIN_API_KEY", "")
 
 settings = Settings()
