@@ -1,8 +1,9 @@
 """
 Xsolla Game Recap - Main Application Entrypoint
 Coordinates background game detection, right edge fade in toast banner,
-the minimalist in-game GameBar HUD with dim backdrop, in-game screenshot capture,
-in-game MP4 video recording, photo album gallery, and Windows System Tray navbar icon.
+mandatory launcher login window, minimalist in-game GameBar HUD with dim backdrop,
+in-game screenshot capture, MP4 video recording, photo album gallery,
+Game Recap by Xsolla, and Windows System Tray navbar icon.
 """
 
 import sys
@@ -25,11 +26,11 @@ if sys.stdout and hasattr(sys.stdout, "reconfigure"):
         pass
 
 import argparse
-import webbrowser
 import tkinter as tk
 
 from config import load_config, WEBSITE_LOGIN_URL
 import auth_state
+import auth_server
 from detector import GameDetector
 from recap_manager import RecapManager
 from banner import WatchingBanner
@@ -39,6 +40,7 @@ from tray import SystemTrayIcon
 from polaroid_service import PolaroidService
 from video_recorder import VideoRecorderService
 from album_viewer import AlbumViewerWindow
+from login_window import LoginWindow
 
 
 class XsollaGameRecapApp:
@@ -79,6 +81,7 @@ class XsollaGameRecapApp:
             on_open_album=self._open_visual_memories,
             on_toggle_record=self._on_record_toggled,
             on_toggle_pause=self._on_pause_toggled,
+            on_login_request=self._on_login,
             video_recorder=self.video_rec
         )
 
@@ -91,24 +94,56 @@ class XsollaGameRecapApp:
 
         # Windows System Tray Integration
         self.tray = SystemTrayIcon(
-            on_open_gamebar=self.gamebar.open,
+            on_open_gamebar=self._on_tray_open_gamebar,
             on_test_banner=self._trigger_test_banner,
             on_quit=self.shutdown,
             on_capture=self._on_capture_requested,
             on_open_album=self._open_visual_memories,
             on_toggle_record=self._on_record_toggled,
+            on_recap=self._open_game_recap,
             on_login=self._on_login,
             on_logout=self._on_logout,
             is_logged_in=auth_state.is_logged_in
         )
 
-        # Start listeners, watchers and tray
-        self.hotkey_listener.start()
-        self.detector.start_monitoring(interval_sec=self.config.get("scan_interval_sec", 1.0))
-        self.tray.start()
+        # Dedicated Rectangular Launcher Login Window
+        self.login_window = LoginWindow(
+            self.root,
+            on_login_success=self._apply_auth_success,
+            on_cancel=self.shutdown
+        )
+
+        self._hotkeys_active = False
+        self._monitoring_active = False
+
+        # Mandatory Login Check:
+        # If player is not logged in, display the rectangular login launcher first.
+        # The in-game Xsolla bar and background detection only unlock AFTER login!
+        if not auth_state.is_logged_in():
+            print("[App] Mandatory login required. Presenting Xsolla login launcher...")
+            self.tray.start()
+            self.root.after(150, self.login_window.show)
+        else:
+            self._activate_app_post_login(open_gamebar=open_immediately)
+
+    def _activate_app_post_login(self, open_gamebar: bool = True):
+        """Activates hotkeys, detector, and overlay after successful login."""
+        if not self._hotkeys_active:
+            self.hotkey_listener.start()
+            self._hotkeys_active = True
+
+        if not self._monitoring_active:
+            self.detector.start_monitoring(interval_sec=self.config.get("scan_interval_sec", 1.0))
+            self._monitoring_active = True
+
+        if not getattr(self.tray, "_thread", None) or not self.tray._thread.is_alive():
+            self.tray.start()
+
+        self.gamebar.update_auth_ui()
 
         print("==========================================================")
         print("  XSOLLA GAME RECAP ACTIVE")
+        print("  User Authenticated: " + auth_state.get_user_label())
         print("  Background game detection: ON")
         print("  System Tray Icon: Active in Windows taskbar")
         print("  Overlay Shortcut: [Ctrl + Shift + X]")
@@ -117,27 +152,44 @@ class XsollaGameRecapApp:
         print("  Recording Pause: [F10]")
         print("==========================================================")
 
-        if open_immediately:
+        if open_gamebar:
             self.root.after(200, self.gamebar.open)
 
     def _on_game_launched(self, game: dict, pid: int, window_title: str):
+        if not auth_state.is_logged_in():
+            return
         print(f"[App] Game Launched: {game.get('name')} (PID {pid})")
         self.recap_mgr.start_session(game, pid, window_title)
         shortcut = self.config.get("hotkey", "Ctrl+Shift+X")
         self.banner.show(game.get("name", "Active Game"), shortcut=shortcut)
 
     def _on_game_closed(self, game: dict):
+        if not auth_state.is_logged_in():
+            return
         print(f"[App] Game Exited: {game.get('name')}")
         if self.video_rec.is_recording:
             self._on_record_toggled()
         self.recap_mgr.end_session()
 
     def _on_hotkey(self):
-        """Called when Ctrl+Shift+X or Alt+X is pressed anywhere in Windows."""
+        """Called when Ctrl+Shift+X is pressed anywhere in Windows."""
+        if not auth_state.is_logged_in():
+            self.login_window.show()
+            return
         self.gamebar.toggle()
+
+    def _on_tray_open_gamebar(self):
+        if not auth_state.is_logged_in():
+            self.login_window.show()
+            return
+        self.gamebar.open()
 
     def _open_visual_memories(self):
         """Opens the GameBar navbar with the Visual Memories tab expanded."""
+        if not auth_state.is_logged_in():
+            self.login_window.show()
+            return
+
         if self.video_rec and getattr(self.video_rec, "is_recording", False):
             print("[App] Prevented opening album/files: video recording is active.")
             if self.gamebar:
@@ -145,6 +197,18 @@ class XsollaGameRecapApp:
                 self.gamebar.show_toast("File access locked while recording", color="#ff5c5c")
             return
         self.gamebar.open(show_album=True)
+
+    def _open_game_recap(self):
+        """Opens the GameBar navbar with the Game Recap tab expanded."""
+        if not auth_state.is_logged_in():
+            self.login_window.show()
+            return
+
+        if self.video_rec and getattr(self.video_rec, "is_recording", False):
+            if self.gamebar:
+                self.gamebar.show_toast("Recap locked while recording", color="#ff5c5c")
+            return
+        self.gamebar.open(show_recap=True)
 
     def _refresh_media_ui(self):
         """Refreshes visual memories tab, recording states, and any open galleries."""
@@ -156,7 +220,9 @@ class XsollaGameRecapApp:
             self.album_viewer._refresh_content()
 
     def _on_capture_requested(self):
-        """Called when F11 or Ctrl+Shift+S is pressed, or SNAP button clicked."""
+        """Called when F11 or SNAP button clicked."""
+        if not auth_state.is_logged_in():
+            return
         active = self.detector.active_game
         game_name = active.get("name") if active else "Highlight Capture"
         duration = self.detector.get_session_duration_str() if active else "00:00:00"
@@ -168,19 +234,19 @@ class XsollaGameRecapApp:
             self._refresh_media_ui()
 
     def _on_record_toggled(self):
-        """Called when F9 or Ctrl+Shift+R is pressed, or REC button clicked."""
+        """Called when F9 or REC button clicked."""
+        if not auth_state.is_logged_in():
+            return
         active = self.detector.active_game
         game_name = active.get("name") if active else "Gameplay Clip"
 
         if self.video_rec.is_recording:
-            # Stop recording
             result = self.video_rec.stop_recording()
             if result:
                 self.recap_mgr.add_event(f"Video Clip Saved: {result['filename']} ({result['duration_str']})")
                 self.banner.show_record_stopped(result["filename"], result["duration_str"])
                 self._refresh_media_ui()
         else:
-            # Start recording
             started = self.video_rec.start_recording(game_name=game_name)
             if started:
                 self.banner.show_record_started(game_name, shortcut="F9")
@@ -188,7 +254,7 @@ class XsollaGameRecapApp:
 
     def _on_pause_toggled(self):
         """Called when F10 is pressed or PAUSE button clicked."""
-        if not self.video_rec.is_recording:
+        if not auth_state.is_logged_in() or not self.video_rec.is_recording:
             return
         active = self.detector.active_game
         game_name = active.get("name") if active else "Gameplay Clip"
@@ -210,16 +276,21 @@ class XsollaGameRecapApp:
         self.banner.show(game_name, shortcut=self.config.get("hotkey", "Ctrl+Shift+X"))
 
     def _on_login(self):
-        """Opens the website's login page and marks this local install as
-        logged in. This is a local UI flag only — no real session/token is
-        exchanged with the website yet."""
-        webbrowser.open(WEBSITE_LOGIN_URL)
-        auth_state.log_in()
-        print("[Auth] Opened login page; marked local install as logged in.")
+        """Shows the login window or launches browser redirect flow."""
+        self.login_window.show()
+
+    def _apply_auth_success(self, token: str, user: str, email: str):
+        """Invoked upon successful authentication from browser or demo access."""
+        auth_state.log_in(user_label=user, email=email, token=token)
+        self.banner.show(f"Welcome, {user}!", shortcut="Xsolla Account Linked")
+        self._activate_app_post_login(open_gamebar=True)
 
     def _on_logout(self):
         auth_state.log_out()
-        print("[Auth] Signed out locally.")
+        self.gamebar.close()
+        self.gamebar.update_auth_ui()
+        self.login_window.show()
+        print("[Auth] Signed out of Xsolla account. Returned to login launcher.")
 
     def run(self):
         try:
@@ -229,6 +300,8 @@ class XsollaGameRecapApp:
 
     def shutdown(self):
         print("\n[App] Shutting down Xsolla Game Recap...")
+        if hasattr(self, 'login_window') and self.login_window:
+            self.login_window.destroy()
         if hasattr(self, 'gamebar') and self.gamebar:
             self.gamebar.close_recordings_folder()
         if hasattr(self, 'video_rec') and self.video_rec.is_recording:

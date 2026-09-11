@@ -85,9 +85,10 @@ def capture_screen_with_cursor():
         pass
     return img
 
-t0 = time.time()
-shot = capture_screen_with_cursor()
-t1 = time.time()
-shot_path = Path(__file__).parent / "screenshot_with_cursor.png"
-shot.save(str(shot_path))
-log.write_text(f"SUCCESS: Screenshot with cursor saved in {(t1-t0)*1000:.2f}ms! Size: {shot.size}\n")
+if __name__ == "__main__":
+    t0 = time.time()
+    shot = capture_screen_with_cursor()
+    t1 = time.time()
+    shot_path = Path(__file__).parent / "screenshot_with_cursor.png"
+    shot.save(str(shot_path))
+    log.write_text(f"SUCCESS: Screenshot with cursor saved in {(t1-t0)*1000:.2f}ms! Size: {shot.size}\n")

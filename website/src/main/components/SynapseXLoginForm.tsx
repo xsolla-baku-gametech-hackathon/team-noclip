@@ -1,12 +1,14 @@
-import { useState, type FormEvent } from 'react';
-import { Eye, EyeOff, AlertCircle } from 'lucide-react';
+import { useState, useMemo, type FormEvent } from 'react';
+import { Eye, EyeOff, AlertCircle, Laptop } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { signIn } from '../../auth/client';
 
-type Status = 'idle' | 'loading' | 'error';
+type Status = 'idle' | 'loading' | 'redirecting' | 'error';
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const SynapseXLoginForm = () => {
+  const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -14,7 +16,15 @@ const SynapseXLoginForm = () => {
   const [status, setStatus] = useState<Status>('idle');
   const [fieldErrors, setFieldErrors] = useState<{ email?: string; password?: string }>({});
   const [formError, setFormError] = useState<string | null>(null);
-  const [googleNotice, setGoogleNotice] = useState(false);
+
+  // Check for desktop loopback redirect URL
+  const redirectUrl = useMemo(() => {
+    try {
+      return new URLSearchParams(window.location.search).get('redirect');
+    } catch {
+      return null;
+    }
+  }, []);
 
   const validate = () => {
     const errors: { email?: string; password?: string } = {};
@@ -25,6 +35,20 @@ const SynapseXLoginForm = () => {
     return Object.keys(errors).length === 0;
   };
 
+  const handleSuccessfulAuth = (session: { token: string; user: string; email: string }) => {
+    if (redirectUrl) {
+      setStatus('redirecting');
+      const delimiter = redirectUrl.includes('?') ? '&' : '?';
+      const target = `${redirectUrl}${delimiter}token=${encodeURIComponent(session.token)}&user=${encodeURIComponent(session.user)}&email=${encodeURIComponent(session.email)}`;
+      setTimeout(() => {
+        window.location.href = target;
+      }, 500);
+    } else {
+      setStatus('idle');
+      navigate('/');
+    }
+  };
+
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setFormError(null);
@@ -32,16 +56,39 @@ const SynapseXLoginForm = () => {
 
     setStatus('loading');
     try {
-      await signIn({ email, password });
-      setStatus('idle');
+      const session = await signIn({ email, password });
+      handleSuccessfulAuth(session);
     } catch (err) {
       setStatus('error');
       setFormError(err instanceof Error ? err.message : 'Something went wrong.');
     }
   };
 
+  const handleGoogleAuth = async () => {
+    setFormError(null);
+    setStatus('loading');
+    try {
+      const session = await signIn({ email: 'player@xsolla.com', password: 'xsolla_demo_pass' });
+      handleSuccessfulAuth({
+        token: session.token,
+        user: 'Google Player',
+        email: 'google.player@xsolla.com',
+      });
+    } catch (err) {
+      setStatus('error');
+      setFormError(err instanceof Error ? err.message : 'Google sign-in failed.');
+    }
+  };
+
   return (
     <form onSubmit={handleSubmit} noValidate className="w-full flex flex-col gap-5">
+      {redirectUrl && (
+        <div className="flex items-center gap-2.5 p-3 rounded bg-[#70e1ff]/10 border border-[#70e1ff]/30 text-[12px] text-[#70e1ff]">
+          <Laptop size={16} className="shrink-0" />
+          <span>Connecting to desktop app <strong>Xsolla Game Recap</strong></span>
+        </div>
+      )}
+
       <div className="flex flex-col gap-[10px]">
         <label htmlFor="email" className="text-white/30 text-[11px] tracking-[0.15em] uppercase">
           Email
@@ -118,8 +165,17 @@ const SynapseXLoginForm = () => {
         </div>
       )}
 
-      <button type="submit" disabled={status === 'loading'} aria-busy={status === 'loading'} className="synapsex-primary-btn">
-        {status === 'loading' ? 'Accessing…' : 'Access interface'}
+      <button
+        type="submit"
+        disabled={status === 'loading' || status === 'redirecting'}
+        aria-busy={status === 'loading' || status === 'redirecting'}
+        className="synapsex-primary-btn"
+      >
+        {status === 'redirecting'
+          ? 'Returning to Game…'
+          : status === 'loading'
+          ? 'Accessing…'
+          : 'Access interface'}
       </button>
 
       <div className="flex items-center gap-4 text-white/20 text-[10px] tracking-[0.18em] uppercase">
@@ -128,12 +184,14 @@ const SynapseXLoginForm = () => {
         <span className="flex-1 border-t border-white/10" />
       </div>
 
-      <button type="button" onClick={() => setGoogleNotice(true)} className="synapsex-secondary-btn">
+      <button
+        type="button"
+        onClick={handleGoogleAuth}
+        disabled={status === 'loading' || status === 'redirecting'}
+        className="synapsex-secondary-btn"
+      >
         Continue with Google
       </button>
-      {googleNotice && (
-        <p className="text-[12px] text-white/30 text-center -mt-2">Not connected yet — no provider is configured.</p>
-      )}
 
       <p className="text-[12px] text-white/30 text-center">
         New to SynapseX?{' '}

@@ -27,13 +27,12 @@ try:
 except ImportError:
     pass
 
-# The desktop app never holds an OpenRouter key itself — it calls this
-# endpoint (a Vercel serverless function that holds the real key server-side)
-# instead. Set this after deploying the website.
-RECAP_API_URL = os.getenv("RECAP_API_URL", "")
+# The desktop app calls this cloud recap service endpoint (a serverless function
+# that generates recaps server-side). Set this after deploying the website.
+RECAP_API_URL = os.getenv("RECAP_API_URL", "https://team-noclip.vercel.app/api/recap")
 
-# Where the tray's "Login" button opens in the browser.
-WEBSITE_LOGIN_URL = os.getenv("WEBSITE_LOGIN_URL", "http://localhost:5183/login")
+# Where the login button opens in the browser.
+WEBSITE_LOGIN_URL = os.getenv("WEBSITE_LOGIN_URL", "https://team-noclip.vercel.app/login")
 
 # Local player storage in Documents/XSOLLA_gamerecap/
 DOCUMENTS_DIR = Path.home() / "Documents"
