@@ -35,6 +35,10 @@ def build():
         import shutil
         built_exe = BASE_DIR / "dist" / "XsollaGameRecap.exe"
         dest_exe = BASE_DIR / "XsollaGameRecap.exe"
+        try:
+            subprocess.run(["taskkill", "/F", "/IM", "XsollaGameRecap.exe"], capture_output=True)
+        except Exception:
+            pass
         shutil.copy2(str(built_exe), str(dest_exe))
         print("\n[Build] SUCCESS! Standalone executable generated at:")
         print(f"       {dest_exe}")
