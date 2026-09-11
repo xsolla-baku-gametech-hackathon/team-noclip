@@ -144,6 +144,8 @@ class VisualMemoriesTab(tk.Frame):
                  on_close_tab: Optional[Callable] = None,
                  on_open_folder: Optional[Callable] = None,
                  on_media_opened: Optional[Callable] = None,
+                 get_backdrop_hwnd: Optional[Callable] = None,
+                 get_window_hwnd: Optional[Callable] = None,
                  video_recorder: Optional[object] = None,
                  **kwargs):
         super().__init__(parent, bg="#080b10", **kwargs)
@@ -154,6 +156,8 @@ class VisualMemoriesTab(tk.Frame):
         self.on_close_tab = on_close_tab
         self.on_open_folder = on_open_folder
         self.on_media_opened = on_media_opened
+        self.get_backdrop_hwnd = get_backdrop_hwnd
+        self.get_window_hwnd = get_window_hwnd
         self.video_recorder = video_recorder
 
         self._thumbnails = []
@@ -169,6 +173,21 @@ class VisualMemoriesTab(tk.Frame):
 
         self._target_scroll_y = 0.0
         self._scroll_animating = False
+
+        # In-Overlay Media Viewer & Player State
+        self.is_viewer_active = False
+        self.viewer_frame: Optional[tk.Frame] = None
+        self._video_cap: Optional[cv2.VideoCapture] = None
+        self._video_timer_id: Optional[str] = None
+        self._video_is_playing: bool = False
+        self._video_seeking: bool = False
+        self._video_total_frames: int = 0
+        self._video_fps: float = 30.0
+        self._current_photo_list: List[Path] = []
+        self._current_photo_idx: int = 0
+        self._current_photo_tk = None
+        self._current_video_tk = None
+        self._updating_scrubber: bool = False
 
         self._build_ui()
 
@@ -452,8 +471,18 @@ class VisualMemoriesTab(tk.Frame):
                         user32.BringWindowToTop(hwnd)
                         user32.SetForegroundWindow(hwnd)
 
-                    # Elevate Explorer window to topmost
+                    # 1. Elevate Explorer window to topmost
                     user32.SetWindowPos(hwnd, -1, 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0040)
+
+                    # 2. Position the dim backdrop shadow immediately BEHIND Explorer (z-order)
+                    b_hwnd = self.get_backdrop_hwnd() if self.get_backdrop_hwnd else None
+                    if b_hwnd:
+                        user32.SetWindowPos(b_hwnd, hwnd, 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0010)
+
+                    # 3. Position the GameBar navbar in front of Explorer
+                    w_hwnd = self.get_window_hwnd() if self.get_window_hwnd else None
+                    if w_hwnd:
+                        user32.SetWindowPos(w_hwnd, -1, 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0010)
             except Exception as e:
                 print(f"[Album] Exception elevating Explorer: {e}")
 
@@ -461,19 +490,521 @@ class VisualMemoriesTab(tk.Frame):
             self.after(delay, _bring_explorer_on_top)
 
     def _open_media(self, media_path: Path):
-        """Opens a media file without closing or hiding the navbar."""
-        if self.on_media_opened:
-            try:
-                self.on_media_opened()
-            except Exception:
-                pass
+        """Opens a media file directly in-overlay (in-game photo viewer or video player)."""
+        is_video = media_path.suffix.lower() in ('.mp4', '.mkv', '.avi', '.mov')
+        if is_video:
+            self._show_video_player(media_path)
+        else:
+            self._show_photo_viewer(media_path)
+
+    # -------------------------------------------------------------------------
+    # In-Overlay Photo Viewer
+    # -------------------------------------------------------------------------
+    def _show_photo_viewer(self, media_path: Path):
+        """Displays high-resolution screenshot viewer directly inside the in-game overlay."""
+        self.close_viewer()
+        self.is_viewer_active = True
+
+        all_memories = self.polaroid_svc.get_recent_memories(limit=100)
+        self._current_photo_list = [p for p in all_memories if p.suffix.lower() in ('.png', '.jpg', '.jpeg')]
+        if media_path in self._current_photo_list:
+            self._current_photo_idx = self._current_photo_list.index(media_path)
+        else:
+            self._current_photo_list = [media_path]
+            self._current_photo_idx = 0
+
+        self.viewer_frame = tk.Frame(self, bg="#080b10")
+        self.viewer_frame.place(x=0, y=0, relwidth=1, relheight=1)
+
+        # Header Bar
+        header = tk.Frame(self.viewer_frame, bg="#0d111a", padx=16, pady=8)
+        header.pack(fill="x")
+
+        btn_back = tk.Button(
+            header,
+            text="⬅ BACK TO ALBUM",
+            font=("Segoe UI", 9, "bold"),
+            bg="#21262d",
+            fg="#70e1ff",
+            activebackground="#30363d",
+            activeforeground="#ffffff",
+            bd=0,
+            padx=12,
+            pady=4,
+            cursor="hand2",
+            command=self.close_viewer
+        )
+        btn_back.pack(side="left")
+
+        self.photo_title_lbl = tk.Label(
+            header,
+            text="",
+            font=("Segoe UI", 9, "bold"),
+            fg="#f0f6fc",
+            bg="#0d111a"
+        )
+        self.photo_title_lbl.pack(side="left", padx=16)
+
+        btn_box = tk.Frame(header, bg="#0d111a")
+        btn_box.pack(side="right")
+
+        self.btn_copy = tk.Button(
+            btn_box,
+            text="📋 Copy Image",
+            font=("Segoe UI", 9),
+            bg="#161b22",
+            fg="#c9d1d9",
+            activebackground="#21262d",
+            activeforeground="#f0f6fc",
+            bd=0,
+            padx=10,
+            pady=4,
+            cursor="hand2",
+            command=self._copy_current_photo
+        )
+        self.btn_copy.pack(side="left", padx=3)
+
+        btn_folder = tk.Button(
+            btn_box,
+            text="📂 Open Folder",
+            font=("Segoe UI", 9),
+            bg="#161b22",
+            fg="#c9d1d9",
+            activebackground="#21262d",
+            activeforeground="#f0f6fc",
+            bd=0,
+            padx=10,
+            pady=4,
+            cursor="hand2",
+            command=self._open_recordings_folder
+        )
+        btn_folder.pack(side="left", padx=3)
+
+        btn_close = tk.Label(
+            btn_box,
+            text="✕",
+            font=("Segoe UI", 11, "bold"),
+            fg="#8b949e",
+            bg="#0d111a",
+            cursor="hand2",
+            padx=8,
+            pady=4
+        )
+        btn_close.pack(side="left", padx=(4, 0))
+        btn_close.bind("<Button-1>", lambda e: self.close_viewer())
+        btn_close.bind("<Enter>", lambda e: btn_close.config(fg="#ff5c5c", bg="#21262d"))
+        btn_close.bind("<Leave>", lambda e: btn_close.config(fg="#8b949e", bg="#0d111a"))
+
+        # Main Viewport
+        viewport = tk.Frame(self.viewer_frame, bg="#05070a")
+        viewport.pack(fill="both", expand=True)
+
+        btn_prev = tk.Label(
+            viewport,
+            text="❮",
+            font=("Segoe UI", 24, "bold"),
+            fg="#6e7681",
+            bg="#05070a",
+            cursor="hand2",
+            padx=14
+        )
+        btn_prev.pack(side="left", fill="y")
+        btn_prev.bind("<Button-1>", lambda e: self._navigate_photo(-1))
+        btn_prev.bind("<Enter>", lambda e: btn_prev.config(fg="#70e1ff", bg="#101520"))
+        btn_prev.bind("<Leave>", lambda e: btn_prev.config(fg="#6e7681", bg="#05070a"))
+
+        btn_next = tk.Label(
+            viewport,
+            text="❯",
+            font=("Segoe UI", 24, "bold"),
+            fg="#6e7681",
+            bg="#05070a",
+            cursor="hand2",
+            padx=14
+        )
+        btn_next.pack(side="right", fill="y")
+        btn_next.bind("<Button-1>", lambda e: self._navigate_photo(1))
+        btn_next.bind("<Enter>", lambda e: btn_next.config(fg="#70e1ff", bg="#101520"))
+        btn_next.bind("<Leave>", lambda e: btn_next.config(fg="#6e7681", bg="#05070a"))
+
+        self.photo_display_lbl = tk.Label(viewport, bg="#05070a")
+        self.photo_display_lbl.pack(fill="both", expand=True, padx=6, pady=6)
+
+        # Bind keyboard shortcuts
+        self._bind_viewer_keys()
+        self._render_current_photo()
+
+    def _render_current_photo(self):
+        if not self._current_photo_list or not self.photo_display_lbl:
+            return
+        photo_path = self._current_photo_list[self._current_photo_idx]
+        total = len(self._current_photo_list)
+        idx_str = f"({self._current_photo_idx + 1}/{total})"
+
         try:
-            os.startfile(str(media_path))
+            with Image.open(str(photo_path)) as raw_img:
+                avail_w = max(400, self.winfo_width() - 140) if self.winfo_width() > 100 else 840
+                avail_h = max(280, self.winfo_height() - 90) if self.winfo_height() > 100 else 520
+
+                ratio = min(avail_w / raw_img.width, avail_h / raw_img.height, 1.0)
+                target_w = max(10, int(raw_img.width * ratio))
+                target_h = max(10, int(raw_img.height * ratio))
+
+                disp_img = raw_img.resize((target_w, target_h), Image.Resampling.LANCZOS)
+                self._current_photo_tk = ImageTk.PhotoImage(disp_img)
+                self.photo_display_lbl.config(image=self._current_photo_tk)
+
+                self.photo_title_lbl.config(
+                    text=f"📸 {photo_path.stem}  {idx_str}  [{raw_img.width}x{raw_img.height}]"
+                )
+        except Exception as err:
+            self.photo_title_lbl.config(text=f"Error loading {photo_path.name}: {err}")
+
+    def _navigate_photo(self, delta: int):
+        if not self._current_photo_list:
+            return
+        self._current_photo_idx = (self._current_photo_idx + delta) % len(self._current_photo_list)
+        self._render_current_photo()
+
+    def _copy_current_photo(self):
+        if not self._current_photo_list:
+            return
+        photo_path = self._current_photo_list[self._current_photo_idx]
+        try:
+            import io
+            import win32clipboard
+            with Image.open(str(photo_path)) as img:
+                output = io.BytesIO()
+                img.convert("RGB").save(output, "BMP")
+                data = output.getvalue()[14:]  # Strip BMP header for CF_DIB
+                output.close()
+                win32clipboard.OpenClipboard()
+                win32clipboard.EmptyClipboard()
+                win32clipboard.SetClipboardData(win32clipboard.CF_DIB, data)
+                win32clipboard.CloseClipboard()
+            if self.btn_copy and self.btn_copy.winfo_exists():
+                self.btn_copy.config(text="✓ Copied to Clipboard!", fg="#3fb950")
+                self.after(2000, lambda: self.btn_copy.config(text="📋 Copy Image", fg="#c9d1d9") if self.btn_copy and self.btn_copy.winfo_exists() else None)
+        except Exception as err:
+            print(f"[Album] Clipboard copy error: {err}")
+
+    # -------------------------------------------------------------------------
+    # In-Overlay Video Player
+    # -------------------------------------------------------------------------
+    def _show_video_player(self, video_path: Path):
+        """Plays recorded gameplay MP4 clip directly inside the in-game overlay."""
+        self.close_viewer()
+        self.is_viewer_active = True
+
+        self._video_cap = cv2.VideoCapture(str(video_path))
+        if not self._video_cap.isOpened():
+            print(f"[Album] Cannot open video: {video_path}")
+            return
+
+        self._video_total_frames = int(self._video_cap.get(cv2.CAP_PROP_FRAME_COUNT)) or 1
+        self._video_fps = self._video_cap.get(cv2.CAP_PROP_FPS) or 30.0
+        self._video_is_playing = True
+        self._video_seeking = False
+
+        self.viewer_frame = tk.Frame(self, bg="#080b10")
+        self.viewer_frame.place(x=0, y=0, relwidth=1, relheight=1)
+
+        # Header Bar
+        header = tk.Frame(self.viewer_frame, bg="#0d111a", padx=16, pady=8)
+        header.pack(fill="x")
+
+        btn_back = tk.Button(
+            header,
+            text="⬅ BACK TO ALBUM",
+            font=("Segoe UI", 9, "bold"),
+            bg="#21262d",
+            fg="#ff005b",
+            activebackground="#30363d",
+            activeforeground="#ffffff",
+            bd=0,
+            padx=12,
+            pady=4,
+            cursor="hand2",
+            command=self.close_viewer
+        )
+        btn_back.pack(side="left")
+
+        w_v = int(self._video_cap.get(cv2.CAP_PROP_FRAME_WIDTH)) or 1920
+        h_v = int(self._video_cap.get(cv2.CAP_PROP_FRAME_HEIGHT)) or 1080
+        total_sec = int(self._video_total_frames / self._video_fps)
+        total_str = f"{total_sec // 60:02d}:{total_sec % 60:02d}"
+
+        tk.Label(
+            header,
+            text=f"🎬 {video_path.stem}  [{w_v}x{h_v} • {int(self._video_fps)} FPS • {total_str}]",
+            font=("Segoe UI", 9, "bold"),
+            fg="#f0f6fc",
+            bg="#0d111a"
+        ).pack(side="left", padx=16)
+
+        btn_box = tk.Frame(header, bg="#0d111a")
+        btn_box.pack(side="right")
+
+        btn_folder = tk.Button(
+            btn_box,
+            text="📂 Open Folder",
+            font=("Segoe UI", 9),
+            bg="#161b22",
+            fg="#c9d1d9",
+            activebackground="#21262d",
+            activeforeground="#f0f6fc",
+            bd=0,
+            padx=10,
+            pady=4,
+            cursor="hand2",
+            command=self._open_recordings_folder
+        )
+        btn_folder.pack(side="left", padx=3)
+
+        btn_close = tk.Label(
+            btn_box,
+            text="✕",
+            font=("Segoe UI", 11, "bold"),
+            fg="#8b949e",
+            bg="#0d111a",
+            cursor="hand2",
+            padx=8,
+            pady=4
+        )
+        btn_close.pack(side="left", padx=(4, 0))
+        btn_close.bind("<Button-1>", lambda e: self.close_viewer())
+        btn_close.bind("<Enter>", lambda e: btn_close.config(fg="#ff5c5c", bg="#21262d"))
+        btn_close.bind("<Leave>", lambda e: btn_close.config(fg="#8b949e", bg="#0d111a"))
+
+        # Video Display Canvas
+        self.video_display_lbl = tk.Label(self.viewer_frame, bg="#000000")
+        self.video_display_lbl.pack(fill="both", expand=True, padx=8, pady=(4, 0))
+        self.video_display_lbl.bind("<Button-1>", lambda e: self._toggle_video_play())
+
+        # Controls Bar at Bottom
+        ctrl_bar = tk.Frame(self.viewer_frame, bg="#0d111a", padx=16, pady=8)
+        ctrl_bar.pack(fill="x", side="bottom")
+
+        self.btn_play_pause = tk.Button(
+            ctrl_bar,
+            text="⏸ PAUSE",
+            font=("Segoe UI", 9, "bold"),
+            bg="#ff005b",
+            fg="#ffffff",
+            activebackground="#ff3377",
+            activeforeground="#ffffff",
+            bd=0,
+            padx=14,
+            pady=4,
+            cursor="hand2",
+            command=self._toggle_video_play
+        )
+        self.btn_play_pause.pack(side="left")
+
+        btn_replay = tk.Button(
+            ctrl_bar,
+            text="↺ REPLAY",
+            font=("Segoe UI", 9),
+            bg="#21262d",
+            fg="#f0f6fc",
+            activebackground="#30363d",
+            activeforeground="#70e1ff",
+            bd=0,
+            padx=10,
+            pady=4,
+            cursor="hand2",
+            command=self._replay_video
+        )
+        btn_replay.pack(side="left", padx=8)
+
+        self.video_time_lbl = tk.Label(
+            ctrl_bar,
+            text=f"00:00 / {total_str}",
+            font=("Consolas", 9, "bold"),
+            fg="#70e1ff",
+            bg="#0d111a"
+        )
+        self.video_time_lbl.pack(side="left", padx=8)
+
+        # Scrubber Scale Slider
+        self.video_scrubber = tk.Scale(
+            ctrl_bar,
+            from_=0,
+            to=max(1, self._video_total_frames - 1),
+            orient="horizontal",
+            showvalue=False,
+            bg="#0d111a",
+            fg="#70e1ff",
+            troughcolor="#1e2633",
+            activebackground="#ff005b",
+            highlightthickness=0,
+            bd=0,
+            cursor="hand2",
+            command=self._on_scrub
+        )
+        self.video_scrubber.pack(side="left", fill="x", expand=True, padx=12)
+        self.video_scrubber.bind("<Button-1>", lambda e: self._on_scrub_start())
+        self.video_scrubber.bind("<ButtonRelease-1>", lambda e: self._on_scrub_end())
+
+        self._bind_viewer_keys()
+        self._next_video_frame()
+
+    def _next_video_frame(self):
+        if not self.is_viewer_active or not self._video_cap or not self._video_cap.isOpened():
+            return
+
+        if self._video_is_playing and not self._video_seeking:
+            ret, frame = self._video_cap.read()
+            if ret and frame is not None:
+                cur_frame = int(self._video_cap.get(cv2.CAP_PROP_POS_FRAMES))
+
+                self._updating_scrubber = True
+                if self.video_scrubber and self.video_scrubber.winfo_exists():
+                    self.video_scrubber.set(cur_frame)
+                self._updating_scrubber = False
+
+                cur_sec = int(cur_frame / self._video_fps)
+                tot_sec = int(self._video_total_frames / self._video_fps)
+                if self.video_time_lbl and self.video_time_lbl.winfo_exists():
+                    self.video_time_lbl.config(
+                        text=f"{cur_sec // 60:02d}:{cur_sec % 60:02d} / {tot_sec // 60:02d}:{tot_sec % 60:02d}"
+                    )
+
+                avail_w = max(400, self.winfo_width() - 32) if self.winfo_width() > 100 else 880
+                avail_h = max(240, self.winfo_height() - 110) if self.winfo_height() > 100 else 460
+
+                f_h, f_w = frame.shape[:2]
+                scale = min(avail_w / f_w, avail_h / f_h, 1.0)
+                new_w = max(10, int(f_w * scale))
+                new_h = max(10, int(f_h * scale))
+
+                resized = cv2.resize(frame, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
+                rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
+                self._current_video_tk = ImageTk.PhotoImage(Image.fromarray(rgb))
+                if self.video_display_lbl and self.video_display_lbl.winfo_exists():
+                    self.video_display_lbl.config(image=self._current_video_tk)
+            else:
+                self._video_is_playing = False
+                if self.btn_play_pause and self.btn_play_pause.winfo_exists():
+                    self.btn_play_pause.config(text="▶ PLAY", bg="#238636")
+
+        delay_ms = max(15, int(1000.0 / self._video_fps))
+        self._video_timer_id = self.after(delay_ms, self._next_video_frame)
+
+    def _toggle_video_play(self):
+        if not self._video_cap:
+            return
+        if self._video_is_playing:
+            self._video_is_playing = False
+            if self.btn_play_pause and self.btn_play_pause.winfo_exists():
+                self.btn_play_pause.config(text="▶ PLAY", bg="#238636")
+        else:
+            cur = int(self._video_cap.get(cv2.CAP_PROP_POS_FRAMES))
+            if cur >= self._video_total_frames - 1:
+                self._video_cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+            self._video_is_playing = True
+            if self.btn_play_pause and self.btn_play_pause.winfo_exists():
+                self.btn_play_pause.config(text="⏸ PAUSE", bg="#ff005b")
+
+    def _replay_video(self):
+        if self._video_cap:
+            self._video_cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+            self._video_is_playing = True
+            if self.btn_play_pause and self.btn_play_pause.winfo_exists():
+                self.btn_play_pause.config(text="⏸ PAUSE", bg="#ff005b")
+
+    def _on_scrub(self, val):
+        if getattr(self, "_updating_scrubber", False):
+            return
+        if self._video_cap:
+            target = int(float(val))
+            self._video_cap.set(cv2.CAP_PROP_POS_FRAMES, target)
+            ret, frame = self._video_cap.read()
+            if ret and frame is not None:
+                avail_w = max(400, self.winfo_width() - 32) if self.winfo_width() > 100 else 880
+                avail_h = max(240, self.winfo_height() - 110) if self.winfo_height() > 100 else 460
+                f_h, f_w = frame.shape[:2]
+                scale = min(avail_w / f_w, avail_h / f_h, 1.0)
+                new_w = max(10, int(f_w * scale))
+                new_h = max(10, int(f_h * scale))
+                resized = cv2.resize(frame, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
+                rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
+                self._current_video_tk = ImageTk.PhotoImage(Image.fromarray(rgb))
+                if self.video_display_lbl and self.video_display_lbl.winfo_exists():
+                    self.video_display_lbl.config(image=self._current_video_tk)
+                cur_sec = int(target / self._video_fps)
+                tot_sec = int(self._video_total_frames / self._video_fps)
+                if self.video_time_lbl and self.video_time_lbl.winfo_exists():
+                    self.video_time_lbl.config(
+                        text=f"{cur_sec // 60:02d}:{cur_sec % 60:02d} / {tot_sec // 60:02d}:{tot_sec % 60:02d}"
+                    )
+
+    def _on_scrub_start(self):
+        self._video_seeking = True
+
+    def _on_scrub_end(self):
+        self._video_seeking = False
+
+    def _bind_viewer_keys(self):
+        try:
+            top = self.winfo_toplevel()
+            top.bind("<Left>", self._on_key_left)
+            top.bind("<Right>", self._on_key_right)
+            top.bind("<space>", self._on_key_space)
         except Exception:
+            pass
+
+    def _on_key_left(self, event=None):
+        if not self.is_viewer_active:
+            return
+        if self._video_cap:
+            cur_frame = int(self._video_cap.get(cv2.CAP_PROP_POS_FRAMES))
+            step = int(self._video_fps * 3)
+            self._on_scrub(max(0, cur_frame - step))
+        elif self._current_photo_list:
+            self._navigate_photo(-1)
+
+    def _on_key_right(self, event=None):
+        if not self.is_viewer_active:
+            return
+        if self._video_cap:
+            cur_frame = int(self._video_cap.get(cv2.CAP_PROP_POS_FRAMES))
+            step = int(self._video_fps * 3)
+            self._on_scrub(min(self._video_total_frames - 1, cur_frame + step))
+        elif self._current_photo_list:
+            self._navigate_photo(1)
+
+    def _on_key_space(self, event=None):
+        if self.is_viewer_active and self._video_cap:
+            self._toggle_video_play()
+
+    def close_viewer(self):
+        """Closes any active in-overlay photo viewer or video player and returns to gallery."""
+        self.is_viewer_active = False
+        if self._video_timer_id:
             try:
-                subprocess.Popen(["explorer.exe", str(media_path)])
+                self.after_cancel(self._video_timer_id)
             except Exception:
                 pass
+            self._video_timer_id = None
+
+        if self._video_cap:
+            try:
+                self._video_cap.release()
+            except Exception:
+                pass
+            self._video_cap = None
+
+        self._current_photo_list = []
+        self._current_photo_tk = None
+        self._current_video_tk = None
+
+        if self.viewer_frame and self.viewer_frame.winfo_exists():
+            try:
+                self.viewer_frame.destroy()
+            except Exception:
+                pass
+            self.viewer_frame = None
 
     def _extract_video_thumbnail(self, video_path: Path, target_w: int = 400) -> Optional[Image.Image]:
         try:

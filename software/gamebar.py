@@ -185,6 +185,9 @@ class GameBarOverlay:
             make_window_invisible_to_capture(self.window)
 
     def _on_escape(self):
+        if self.visual_memories_tab and getattr(self.visual_memories_tab, "is_viewer_active", False):
+            self.visual_memories_tab.close_viewer()
+            return
         if self.is_album_open:
             self.toggle_album()
         else:
@@ -211,16 +214,39 @@ class GameBarOverlay:
         self.hide_backdrop()
 
     def hide_backdrop(self):
-        """Hides the dim backdrop shadow without closing or affecting the navbar or gallery."""
+        """Hides the dim backdrop shadow."""
         if self.backdrop and self.backdrop.winfo_exists():
             try:
                 self.backdrop.withdraw()
             except Exception:
                 pass
 
+    def get_backdrop_hwnd(self) -> Optional[int]:
+        """Returns the Win32 HWND of the dim backdrop overlay window."""
+        if self.backdrop and self.backdrop.winfo_exists():
+            try:
+                return int(self.backdrop.wm_frame(), 16)
+            except Exception:
+                try:
+                    return self.backdrop.winfo_id()
+                except Exception:
+                    pass
+        return None
+
+    def get_window_hwnd(self) -> Optional[int]:
+        """Returns the Win32 HWND of the GameBar overlay window."""
+        if self.window and self.window.winfo_exists():
+            try:
+                return int(self.window.wm_frame(), 16)
+            except Exception:
+                try:
+                    return self.window.winfo_id()
+                except Exception:
+                    pass
+        return None
+
     def _on_open_folder_requested(self):
-        """Hides the dim backdrop shadow and elevates the recordings folder to the topmost layer."""
-        self.hide_backdrop()
+        """Elevates the recordings folder in front of the shadow without removing the shadow."""
         if self.window and self.window.winfo_exists():
             self.window.lift()
         if self.visual_memories_tab:
@@ -440,7 +466,8 @@ class GameBarOverlay:
             on_pause_request=self.on_toggle_pause,
             on_close_tab=self.toggle_album,
             on_open_folder=self._on_open_folder_requested,
-            on_media_opened=self.hide_backdrop,
+            get_backdrop_hwnd=self.get_backdrop_hwnd,
+            get_window_hwnd=self.get_window_hwnd,
             video_recorder=self.video_rec
         )
         self.visual_memories_tab.pack(fill="both", expand=True)
