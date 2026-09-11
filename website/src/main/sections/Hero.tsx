@@ -7,7 +7,7 @@ const BASE_IMAGE =
 const REVEAL_IMAGE =
   'https://soft-zoom-63098134.figma.site/_assets/v11/6be2165e31648955b4e071f4cf2a50bc572b9bfd.png?w=1536';
 
-const HEADLINE = 'I build compelling visual stories & motion that make ideas shine.';
+const HEADLINE = 'Jump back into any game and remember exactly what you were doing.';
 
 const Hero = () => {
   return (
