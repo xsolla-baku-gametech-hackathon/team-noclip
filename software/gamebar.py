@@ -15,6 +15,8 @@ from detector import GameDetector
 from recap_manager import RecapManager
 from polaroid_service import PolaroidService
 from album_viewer import VisualMemoriesTab
+from recap_panel import GameRecapTab
+import auth_state
 
 
 class GameBarOverlay:
@@ -28,6 +30,7 @@ class GameBarOverlay:
                  on_open_album: Optional[Callable] = None,
                  on_toggle_record: Optional[Callable] = None,
                  on_toggle_pause: Optional[Callable] = None,
+                 on_login_request: Optional[Callable] = None,
                  video_recorder: Optional[object] = None):
         self.master = master
         self.detector = detector
@@ -38,10 +41,14 @@ class GameBarOverlay:
         self.on_open_album = on_open_album or self.toggle_album
         self.on_toggle_record = on_toggle_record
         self.on_toggle_pause = on_toggle_pause
+        self.on_login_request = on_login_request
         self.video_rec = video_recorder
+
         self.btn_rec = None
         self.btn_snap = None
         self.btn_album = None
+        self.btn_recap = None
+        self.btn_login_badge = None
         self.rec_badge = None
         self.btn_pause = None
         self.btn_stop = None
@@ -52,8 +59,11 @@ class GameBarOverlay:
         self.bar = None
         self.tab_container = None
         self.visual_memories_tab: Optional[VisualMemoriesTab] = None
+        self.recap_tab: Optional[GameRecapTab] = None
+
         self.is_open = False
         self.is_album_open = False
+        self.is_recap_open = False
         self._timer_job = None
         self._logo_photo = None
         self._drag_start_x = 0
@@ -101,7 +111,7 @@ class GameBarOverlay:
         self.backdrop.lift()
         make_window_invisible_to_capture(self.backdrop)
 
-    def open(self, show_album: bool = False):
+    def open(self, show_album: bool = False, show_recap: bool = False):
         """Displays the dim backdrop and the horizontal NVIDIA style GameBar."""
         self.is_open = True
 
@@ -109,6 +119,7 @@ class GameBarOverlay:
         is_rec = bool(self.video_rec and getattr(self.video_rec, "is_recording", False))
         if is_rec:
             show_album = False
+            show_recap = False
 
         # 1. Show the dim backdrop behind the game
         self._show_backdrop()
@@ -121,9 +132,12 @@ class GameBarOverlay:
             self.window.lift()
             self.window.focus_force()
             self.update_recording_state()
+            self.update_auth_ui()
             self._start_refresh_timer()
             if show_album and not self.is_album_open:
                 self.toggle_album()
+            elif show_recap and not self.is_recap_open:
+                self.toggle_recap()
             make_window_invisible_to_capture(self.window)
             return
 
@@ -136,8 +150,8 @@ class GameBarOverlay:
         self.window.attributes("-topmost", True)
 
         # Sleek Horizontal Bar Dimensions (NVIDIA style)
-        width = 980
-        height = 660 if show_album else 56
+        width = 1120
+        height = 660 if (show_album or show_recap) else 56
         sw = self.window.winfo_screenwidth()
         x = (sw - width) // 2
         y = 20
@@ -148,7 +162,11 @@ class GameBarOverlay:
         self._build_bar(width, height)
         if show_album:
             self.toggle_album()
+        elif show_recap:
+            self.toggle_recap()
+
         self.update_recording_state()
+        self.update_auth_ui()
         self._start_refresh_timer()
 
         # Stack order: backdrop behind, bar in front
@@ -160,7 +178,6 @@ class GameBarOverlay:
 
     def toggle_album(self):
         """Toggles the Visual Memories tab inside the GameBar navbar."""
-        # Strictly prevent opening album or files while recording is in progress
         is_rec = bool(self.video_rec and getattr(self.video_rec, "is_recording", False))
         if is_rec and not self.is_album_open:
             self.show_toast("File access locked while recording", color="#ff5c5c")
@@ -169,6 +186,14 @@ class GameBarOverlay:
         if not self.window or not self.window.winfo_exists():
             self.open(show_album=True)
             return
+
+        # Close recap tab if open
+        if self.is_recap_open:
+            self.is_recap_open = False
+            if self.recap_tab:
+                self.recap_tab.pack_forget()
+            if self.btn_recap and self.btn_recap.winfo_exists():
+                self.btn_recap.config(bg="#1f293d", fg="#70e1ff", text="✨ GAME RECAP BY XSOLLA")
 
         self.is_album_open = not self.is_album_open
         cur_x = self.window.winfo_x()
@@ -180,26 +205,122 @@ class GameBarOverlay:
             if self.tab_container:
                 self.tab_container.pack(fill="both", expand=True, side="top")
             if self.visual_memories_tab:
+                self.visual_memories_tab.pack(fill="both", expand=True)
                 self.visual_memories_tab.refresh()
-            self.window.geometry(f"980x660+{cur_x}+{cur_y}")
+            self.window.geometry(f"1120x660+{cur_x}+{cur_y}")
             if self.btn_album and self.btn_album.winfo_exists():
                 self.btn_album.config(bg="#70e1ff", fg="#0d1117", text="📸 VISUAL MEMORIES ▾")
             make_window_invisible_to_capture(self.window)
         else:
+            if self.visual_memories_tab:
+                self.visual_memories_tab.pack_forget()
             if self.tab_divider:
                 self.tab_divider.pack_forget()
             if self.tab_container:
                 self.tab_container.pack_forget()
-            self.window.geometry(f"980x56+{cur_x}+{cur_y}")
+            self.window.geometry(f"1120x56+{cur_x}+{cur_y}")
             if self.btn_album and self.btn_album.winfo_exists():
                 self.btn_album.config(bg="#21262d", fg="#f0f6fc", text="📸 VISUAL MEMORIES")
             make_window_invisible_to_capture(self.window)
             if self.visual_memories_tab:
                 self.visual_memories_tab.minimize_recordings_folder()
 
+    def toggle_recap(self):
+        """Toggles the AI Game Recap tab inside the GameBar navbar."""
+        is_rec = bool(self.video_rec and getattr(self.video_rec, "is_recording", False))
+        if is_rec and not self.is_recap_open:
+            self.show_toast("Recap locked while recording", color="#ff5c5c")
+            return
+
+        if not self.window or not self.window.winfo_exists():
+            self.open(show_recap=True)
+            return
+
+        # Close album tab if open
+        if self.is_album_open:
+            self.is_album_open = False
+            if self.visual_memories_tab:
+                self.visual_memories_tab.pack_forget()
+            if self.btn_album and self.btn_album.winfo_exists():
+                self.btn_album.config(bg="#21262d", fg="#f0f6fc", text="📸 VISUAL MEMORIES")
+
+        self.is_recap_open = not self.is_recap_open
+        cur_x = self.window.winfo_x()
+        cur_y = self.window.winfo_y()
+
+        if self.is_recap_open:
+            if self.tab_divider:
+                self.tab_divider.pack(fill="x", side="top")
+            if self.tab_container:
+                self.tab_container.pack(fill="both", expand=True, side="top")
+            if self.recap_tab:
+                self.recap_tab.pack(fill="both", expand=True)
+                self.recap_tab.refresh()
+            self.window.geometry(f"1120x660+{cur_x}+{cur_y}")
+            if self.btn_recap and self.btn_recap.winfo_exists():
+                self.btn_recap.config(bg="#70e1ff", fg="#0d1117", text="✨ GAME RECAP ▾")
+            make_window_invisible_to_capture(self.window)
+        else:
+            if self.recap_tab:
+                self.recap_tab.pack_forget()
+            if self.tab_divider:
+                self.tab_divider.pack_forget()
+            if self.tab_container:
+                self.tab_container.pack_forget()
+            self.window.geometry(f"1120x56+{cur_x}+{cur_y}")
+            if self.btn_recap and self.btn_recap.winfo_exists():
+                self.btn_recap.config(bg="#1f293d", fg="#70e1ff", text="✨ GAME RECAP BY XSOLLA")
+            make_window_invisible_to_capture(self.window)
+
+    def open_recap(self):
+        """Opens or expands the AI Game Recap panel immediately."""
+        if not self.is_open or not self.window or not self.window.winfo_exists():
+            self.open(show_recap=True)
+        elif not self.is_recap_open:
+            self.toggle_recap()
+        elif self.recap_tab:
+            self.recap_tab.refresh()
+
+    def update_auth_ui(self):
+        """Updates the login badge and recap panel according to auth state."""
+        if not self.btn_login_badge or not self.btn_login_badge.winfo_exists():
+            return
+
+        if auth_state.is_logged_in():
+            user = auth_state.get_user_label()
+            self.btn_login_badge.config(
+                text=f"🟢 {user}",
+                font=("Segoe UI", 8, "bold"),
+                fg="#56d364",
+                bg="#161b22"
+            )
+        else:
+            self.btn_login_badge.config(
+                text="🔑 LOGIN",
+                font=("Segoe UI", 8, "bold"),
+                fg="#70e1ff",
+                bg="#1f293d"
+            )
+
+        if self.recap_tab and self.is_recap_open:
+            self.recap_tab.refresh()
+
+    def _on_login_badge_click(self):
+        if not auth_state.is_logged_in():
+            if self.on_login_request:
+                self.on_login_request()
+        else:
+            # When clicked while logged in, offer quick sign out
+            auth_state.log_out()
+            self.update_auth_ui()
+            self.show_toast("Signed out of Xsolla account", color="#70e1ff")
+
     def _on_escape(self):
         if self.visual_memories_tab and getattr(self.visual_memories_tab, "is_viewer_active", False):
             self.visual_memories_tab.close_viewer()
+            return
+        if self.is_recap_open:
+            self.toggle_recap()
             return
         if self.is_album_open:
             self.toggle_album()
@@ -221,6 +342,8 @@ class GameBarOverlay:
 
         if self.window and self.window.winfo_exists():
             try:
+                if self.is_recap_open:
+                    self.toggle_recap()
                 if self.is_album_open:
                     self.toggle_album()
                 self.window.withdraw()
@@ -243,7 +366,6 @@ class GameBarOverlay:
                 pass
 
     def get_backdrop_hwnd(self) -> Optional[int]:
-        """Returns the Win32 HWND of the dim backdrop overlay window."""
         if self.backdrop and self.backdrop.winfo_exists():
             try:
                 return int(self.backdrop.wm_frame(), 16)
@@ -255,7 +377,6 @@ class GameBarOverlay:
         return None
 
     def get_window_hwnd(self) -> Optional[int]:
-        """Returns the Win32 HWND of the GameBar overlay window."""
         if self.window and self.window.winfo_exists():
             try:
                 return int(self.window.wm_frame(), 16)
@@ -267,7 +388,6 @@ class GameBarOverlay:
         return None
 
     def _on_open_folder_requested(self):
-        """Elevates the recordings folder on top of everything without removing the shadow."""
         if self.video_rec and getattr(self.video_rec, "is_recording", False):
             self.show_toast("Folder locked while recording is active", color="#ff5c5c")
             return
@@ -287,7 +407,7 @@ class GameBarOverlay:
         self.bar.bind("<B1-Motion>", self._on_drag)
 
         # 1. Standalone Clean Robot Mascot Favicon / Logo in Navbar
-        logo_frame = tk.Frame(self.bar, bg="#0d1117", padx=14)
+        logo_frame = tk.Frame(self.bar, bg="#0d1117", padx=12)
         logo_frame.pack(side="left", fill="y")
         logo_frame.bind("<Button-1>", self._start_drag)
         logo_frame.bind("<B1-Motion>", self._on_drag)
@@ -299,13 +419,12 @@ class GameBarOverlay:
         if logo_path.exists():
             try:
                 with Image.open(str(logo_path)) as pil_logo:
-                    # Clean standalone robot mascot sized to fit 36px height
-                    lh = 36
+                    lh = 34
                     lw = int(pil_logo.width * (lh / pil_logo.height))
                     resized = pil_logo.resize((lw, lh), Image.Resampling.LANCZOS)
                     self._logo_photo = ImageTk.PhotoImage(resized)
                     lbl_logo = tk.Label(logo_frame, image=self._logo_photo, bg="#0d1117")
-                    lbl_logo.pack(side="left", pady=9)
+                    lbl_logo.pack(side="left", pady=10)
                     lbl_logo.bind("<Button-1>", self._start_drag)
                     lbl_logo.bind("<B1-Motion>", self._on_drag)
                     try:
@@ -318,68 +437,67 @@ class GameBarOverlay:
         self._add_separator(self.bar)
 
         # 2. Game Section
-        game_frame = tk.Frame(self.bar, bg="#0d1117", padx=16)
+        game_frame = tk.Frame(self.bar, bg="#0d1117", padx=12)
         game_frame.pack(side="left", fill="y")
         game_frame.bind("<Button-1>", self._start_drag)
         game_frame.bind("<B1-Motion>", self._on_drag)
 
         tk.Label(game_frame, text="GAME", font=("Segoe UI", 7, "bold"), fg="#8b949e", bg="#0d1117").pack(anchor="w", pady=(8, 0))
-        self.game_lbl = tk.Label(game_frame, text="NO ACTIVE GAME", font=("Segoe UI", 10, "bold"), fg="#f0f6fc", bg="#0d1117")
+        self.game_lbl = tk.Label(game_frame, text="NO ACTIVE GAME", font=("Segoe UI", 9, "bold"), fg="#f0f6fc", bg="#0d1117")
         self.game_lbl.pack(anchor="w")
 
         self._add_separator(self.bar)
 
         # 3. Session Duration Section
-        timer_frame = tk.Frame(self.bar, bg="#0d1117", padx=16)
+        timer_frame = tk.Frame(self.bar, bg="#0d1117", padx=12)
         timer_frame.pack(side="left", fill="y")
         timer_frame.bind("<Button-1>", self._start_drag)
         timer_frame.bind("<B1-Motion>", self._on_drag)
 
         tk.Label(timer_frame, text="SESSION", font=("Segoe UI", 7, "bold"), fg="#8b949e", bg="#0d1117").pack(anchor="w", pady=(8, 0))
-        self.timer_lbl = tk.Label(timer_frame, text="00:00:00", font=("Consolas", 11, "bold"), fg="#70e1ff", bg="#0d1117")
+        self.timer_lbl = tk.Label(timer_frame, text="00:00:00", font=("Consolas", 10, "bold"), fg="#70e1ff", bg="#0d1117")
         self.timer_lbl.pack(anchor="w")
 
         self._add_separator(self.bar)
 
         # 4. Telemetry Metrics Section
-        stats_frame = tk.Frame(self.bar, bg="#0d1117", padx=16)
+        stats_frame = tk.Frame(self.bar, bg="#0d1117", padx=12)
         stats_frame.pack(side="left", fill="y")
         stats_frame.bind("<Button-1>", self._start_drag)
         stats_frame.bind("<B1-Motion>", self._on_drag)
 
         tk.Label(stats_frame, text="TELEMETRY", font=("Segoe UI", 7, "bold"), fg="#8b949e", bg="#0d1117").pack(anchor="w", pady=(8, 0))
-        self.stats_lbl = tk.Label(stats_frame, text="RAM 0 MB  |  CPU 0.0%", font=("Segoe UI", 9), fg="#c9d1d9", bg="#0d1117")
+        self.stats_lbl = tk.Label(stats_frame, text="RAM 0 MB  |  CPU 0.0%", font=("Segoe UI", 8), fg="#c9d1d9", bg="#0d1117")
         self.stats_lbl.pack(anchor="w")
 
         self._add_separator(self.bar)
 
         # 5. Status Section
-        status_frame = tk.Frame(self.bar, bg="#0d1117", padx=16)
+        status_frame = tk.Frame(self.bar, bg="#0d1117", padx=12)
         status_frame.pack(side="left", fill="y")
         status_frame.bind("<Button-1>", self._start_drag)
         status_frame.bind("<B1-Motion>", self._on_drag)
 
         tk.Label(status_frame, text="STATUS", font=("Segoe UI", 7, "bold"), fg="#8b949e", bg="#0d1117").pack(anchor="w", pady=(8, 0))
-        self.status_lbl = tk.Label(status_frame, text="IDLE", font=("Segoe UI", 9, "bold"), fg="#6e7681", bg="#0d1117")
+        self.status_lbl = tk.Label(status_frame, text="IDLE", font=("Segoe UI", 8, "bold"), fg="#6e7681", bg="#0d1117")
         self.status_lbl.pack(anchor="w")
 
         self._add_separator(self.bar)
 
-        # 6. Quick Action Buttons: [📸 SNAP] & [📸 VISUAL MEMORIES]
-        action_frame = tk.Frame(self.bar, bg="#0d1117", padx=12)
+        # 6. Quick Action Buttons: [📸 SNAP] & [🔴 REC] & [📸 VISUAL MEMORIES] & [✨ GAME RECAP BY XSOLLA] & [🔑 LOGIN]
+        action_frame = tk.Frame(self.bar, bg="#0d1117", padx=8)
         action_frame.pack(side="left", fill="y")
         action_frame.bind("<Button-1>", self._start_drag)
         action_frame.bind("<B1-Motion>", self._on_drag)
 
-        # Standard Idle Controls
         self.btn_snap = tk.Label(
             action_frame,
-            text="📸 SNAP (F11)",
+            text="📸 SNAP",
             font=("Segoe UI", 8, "bold"),
             fg="#f0f6fc",
             bg="#21262d",
             cursor="hand2",
-            padx=10,
+            padx=8,
             pady=4
         )
         if self.on_capture:
@@ -389,12 +507,12 @@ class GameBarOverlay:
 
         self.btn_rec = tk.Label(
             action_frame,
-            text="🔴 REC (F9)",
+            text="🔴 REC",
             font=("Segoe UI", 8, "bold"),
             fg="#ff5c5c",
             bg="#21262d",
             cursor="hand2",
-            padx=10,
+            padx=8,
             pady=4
         )
         if self.on_toggle_record:
@@ -409,12 +527,40 @@ class GameBarOverlay:
             fg="#f0f6fc",
             bg="#21262d",
             cursor="hand2",
-            padx=10,
+            padx=9,
             pady=4
         )
         self.btn_album.bind("<Button-1>", lambda e: self.toggle_album())
         self.btn_album.bind("<Enter>", lambda e: self._on_album_hover(True))
         self.btn_album.bind("<Leave>", lambda e: self._on_album_hover(False))
+
+        # ✨ GAME RECAP BY XSOLLA
+        self.btn_recap = tk.Label(
+            action_frame,
+            text="✨ GAME RECAP BY XSOLLA",
+            font=("Segoe UI", 8, "bold"),
+            fg="#70e1ff",
+            bg="#1f293d",
+            cursor="hand2",
+            padx=10,
+            pady=4
+        )
+        self.btn_recap.bind("<Button-1>", lambda e: self.toggle_recap())
+        self.btn_recap.bind("<Enter>", lambda e: self._on_recap_hover(True))
+        self.btn_recap.bind("<Leave>", lambda e: self._on_recap_hover(False))
+
+        # Auth indicator / quick login button
+        self.btn_login_badge = tk.Label(
+            action_frame,
+            text="🔑 LOGIN",
+            font=("Segoe UI", 8, "bold"),
+            fg="#70e1ff",
+            bg="#1f293d",
+            cursor="hand2",
+            padx=8,
+            pady=4
+        )
+        self.btn_login_badge.bind("<Button-1>", lambda e: self._on_login_badge_click())
 
         # Active Video Recording Controls (Only shown during video recording)
         self.rec_badge = tk.Label(
@@ -434,7 +580,7 @@ class GameBarOverlay:
             fg="#f0f6fc",
             bg="#21262d",
             cursor="hand2",
-            padx=10,
+            padx=8,
             pady=4
         )
         if self.on_toggle_pause:
@@ -449,7 +595,7 @@ class GameBarOverlay:
             fg="#ffffff",
             bg="#da3633",
             cursor="hand2",
-            padx=10,
+            padx=8,
             pady=4
         )
         if self.on_toggle_record:
@@ -458,9 +604,11 @@ class GameBarOverlay:
         self.btn_stop.bind("<Leave>", lambda e: self.btn_stop.config(bg="#da3633"))
 
         # Initial layout: standard buttons shown
-        self.btn_snap.pack(side="left", pady=12, padx=3)
-        self.btn_rec.pack(side="left", pady=12, padx=3)
-        self.btn_album.pack(side="left", pady=12, padx=3)
+        self.btn_snap.pack(side="left", pady=12, padx=2)
+        self.btn_rec.pack(side="left", pady=12, padx=2)
+        self.btn_album.pack(side="left", pady=12, padx=2)
+        self.btn_recap.pack(side="left", pady=12, padx=2)
+        self.btn_login_badge.pack(side="left", pady=12, padx=2)
 
         # 7. Close Button [X] on the far right
         close_frame = tk.Frame(self.bar, bg="#0d1117", padx=12)
@@ -480,7 +628,7 @@ class GameBarOverlay:
         btn_close.bind("<Enter>", lambda e: btn_close.config(fg="#ff5c5c", bg="#21262d"))
         btn_close.bind("<Leave>", lambda e: btn_close.config(fg="#8b949e", bg="#0d1117"))
 
-        # 8. Visual Memories Integrated Tab Panel (Expands directly below navbar)
+        # 8. Integrated Tab Panels Container (Expands directly below navbar)
         self.tab_divider = tk.Frame(self.outer, bg="#1a2230", height=1)
         self.tab_container = tk.Frame(self.outer, bg="#080b10")
 
@@ -496,7 +644,14 @@ class GameBarOverlay:
             get_window_hwnd=self.get_window_hwnd,
             video_recorder=self.video_rec
         )
-        self.visual_memories_tab.pack(fill="both", expand=True)
+
+        self.recap_tab = GameRecapTab(
+            self.tab_container,
+            on_close_tab=self.toggle_recap,
+            on_login_request=self.on_login_request,
+            get_active_game=lambda: self.detector.active_game,
+            on_toast=self.show_toast
+        )
 
     def _add_separator(self, parent):
         sep = tk.Frame(parent, bg="#21262d", width=1)
@@ -534,8 +689,16 @@ class GameBarOverlay:
         else:
             self.btn_album.config(bg="#30363d" if is_hovered else "#21262d", fg="#ffffff" if is_hovered else "#f0f6fc")
 
+    def _on_recap_hover(self, is_hovered: bool):
+        if not self.btn_recap or not self.btn_recap.winfo_exists():
+            return
+        if self.is_recap_open:
+            self.btn_recap.config(bg="#5bd2f0" if is_hovered else "#70e1ff", fg="#0d1117")
+        else:
+            self.btn_recap.config(bg="#2d3b55" if is_hovered else "#1f293d", fg="#70e1ff")
+
     def update_recording_state(self):
-        """Swaps UI buttons: hides SNAP & ALBUM, shows PAUSE & STOP during video recording."""
+        """Swaps UI buttons: hides action buttons, shows PAUSE & STOP during video recording."""
         if not self.window or not self.window.winfo_exists():
             return
 
@@ -544,21 +707,17 @@ class GameBarOverlay:
         duration = self.video_rec.get_duration_str() if self.video_rec else "00:00"
 
         if is_rec:
-            # Auto-collapse album and close in-overlay viewer if recording started while open
             if self.is_album_open:
                 self.toggle_album()
+            if self.is_recap_open:
+                self.toggle_recap()
             if self.visual_memories_tab and getattr(self.visual_memories_tab, "is_viewer_active", False):
                 self.visual_memories_tab.close_viewer()
 
-            # Hide screenshot and album buttons completely
-            if self.btn_snap and self.btn_snap.winfo_ismapped():
-                self.btn_snap.pack_forget()
-            if self.btn_album and self.btn_album.winfo_ismapped():
-                self.btn_album.pack_forget()
-            if self.btn_rec and self.btn_rec.winfo_ismapped():
-                self.btn_rec.pack_forget()
+            for btn in [self.btn_snap, self.btn_album, self.btn_rec, self.btn_recap, self.btn_login_badge]:
+                if btn and btn.winfo_ismapped():
+                    btn.pack_forget()
 
-            # Display recording badge, pause button, and stop button
             if self.rec_badge and not self.rec_badge.winfo_ismapped():
                 self.rec_badge.pack(side="left", pady=12, padx=4)
             if self.btn_pause and not self.btn_pause.winfo_ismapped():
@@ -566,7 +725,6 @@ class GameBarOverlay:
             if self.btn_stop and not self.btn_stop.winfo_ismapped():
                 self.btn_stop.pack(side="left", pady=12, padx=4)
 
-            # Update live texts
             if is_paused:
                 self.rec_badge.config(text=f"⏸️ PAUSED {duration}", fg="#ffcc00", bg="#2b2308")
                 self.btn_pause.config(text="▶️ RESUME (F10)", bg="#238636", fg="#ffffff")
@@ -577,24 +735,15 @@ class GameBarOverlay:
             self.btn_stop.config(text="⏹️ STOP (F9)", bg="#da3633", fg="#ffffff")
 
         else:
-            # Hide recording badge, pause button, and stop button
-            if self.rec_badge and self.rec_badge.winfo_ismapped():
-                self.rec_badge.pack_forget()
-            if self.btn_pause and self.btn_pause.winfo_ismapped():
-                self.btn_pause.pack_forget()
-            if self.btn_stop and self.btn_stop.winfo_ismapped():
-                self.btn_stop.pack_forget()
+            for btn in [self.rec_badge, self.btn_pause, self.btn_stop]:
+                if btn and btn.winfo_ismapped():
+                    btn.pack_forget()
 
-            # Restore screenshot and album buttons
-            if self.btn_snap and not self.btn_snap.winfo_ismapped():
-                self.btn_snap.pack(side="left", pady=12, padx=3)
-            if self.btn_rec and not self.btn_rec.winfo_ismapped():
-                self.btn_rec.pack(side="left", pady=12, padx=3)
-            if self.btn_album and not self.btn_album.winfo_ismapped():
-                self.btn_album.pack(side="left", pady=12, padx=3)
+            for btn in [self.btn_snap, self.btn_rec, self.btn_album, self.btn_recap, self.btn_login_badge]:
+                if btn and not btn.winfo_ismapped():
+                    btn.pack(side="left", pady=12, padx=2)
 
     def show_toast(self, message: str, color: str = "#ff5c5c", duration_ms: int = 3000):
-        """Displays high-visibility alert toast preventing media access during recording."""
         try:
             import winsound
             winsound.MessageBeep(winsound.MB_ICONEXCLAMATION)

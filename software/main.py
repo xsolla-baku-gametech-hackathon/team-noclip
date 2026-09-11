@@ -2,7 +2,7 @@
 Xsolla Game Recap - Main Application Entrypoint
 Coordinates background game detection, right edge fade in toast banner,
 the minimalist in-game GameBar HUD with dim backdrop, in-game screenshot capture,
-in-game MP4 video recording, photo album gallery, and Windows System Tray navbar icon.
+in-game MP4 video recording, photo album gallery, AI Game Recap by Xsolla, and Windows System Tray navbar icon.
 """
 
 import sys
@@ -25,11 +25,11 @@ if sys.stdout and hasattr(sys.stdout, "reconfigure"):
         pass
 
 import argparse
-import webbrowser
 import tkinter as tk
 
 from config import load_config, WEBSITE_LOGIN_URL
 import auth_state
+import auth_server
 from detector import GameDetector
 from recap_manager import RecapManager
 from banner import WatchingBanner
@@ -79,6 +79,7 @@ class XsollaGameRecapApp:
             on_open_album=self._open_visual_memories,
             on_toggle_record=self._on_record_toggled,
             on_toggle_pause=self._on_pause_toggled,
+            on_login_request=self._on_login,
             video_recorder=self.video_rec
         )
 
@@ -97,6 +98,7 @@ class XsollaGameRecapApp:
             on_capture=self._on_capture_requested,
             on_open_album=self._open_visual_memories,
             on_toggle_record=self._on_record_toggled,
+            on_recap=self._open_game_recap,
             on_login=self._on_login,
             on_logout=self._on_logout,
             is_logged_in=auth_state.is_logged_in
@@ -146,6 +148,14 @@ class XsollaGameRecapApp:
             return
         self.gamebar.open(show_album=True)
 
+    def _open_game_recap(self):
+        """Opens the GameBar navbar with the AI Game Recap tab expanded."""
+        if self.video_rec and getattr(self.video_rec, "is_recording", False):
+            if self.gamebar:
+                self.gamebar.show_toast("Recap locked while recording", color="#ff5c5c")
+            return
+        self.gamebar.open(show_recap=True)
+
     def _refresh_media_ui(self):
         """Refreshes visual memories tab, recording states, and any open galleries."""
         if self.gamebar.window and self.gamebar.window.winfo_exists():
@@ -156,7 +166,7 @@ class XsollaGameRecapApp:
             self.album_viewer._refresh_content()
 
     def _on_capture_requested(self):
-        """Called when F11 or Ctrl+Shift+S is pressed, or SNAP button clicked."""
+        """Called when F11 or SNAP button clicked."""
         active = self.detector.active_game
         game_name = active.get("name") if active else "Highlight Capture"
         duration = self.detector.get_session_duration_str() if active else "00:00:00"
@@ -168,7 +178,7 @@ class XsollaGameRecapApp:
             self._refresh_media_ui()
 
     def _on_record_toggled(self):
-        """Called when F9 or Ctrl+Shift+R is pressed, or REC button clicked."""
+        """Called when F9 or REC button clicked."""
         active = self.detector.active_game
         game_name = active.get("name") if active else "Gameplay Clip"
 
@@ -210,16 +220,36 @@ class XsollaGameRecapApp:
         self.banner.show(game_name, shortcut=self.config.get("hotkey", "Ctrl+Shift+X"))
 
     def _on_login(self):
-        """Opens the website's login page and marks this local install as
-        logged in. This is a local UI flag only — no real session/token is
-        exchanged with the website yet."""
-        webbrowser.open(WEBSITE_LOGIN_URL)
-        auth_state.log_in()
-        print("[Auth] Opened login page; marked local install as logged in.")
+        """
+        Starts the desktop loopback authentication listener and opens the browser
+        to the website login page with the redirect callback URL.
+        """
+        base_login_url = self.config.get("website_login_url", WEBSITE_LOGIN_URL)
+        auth_server.start_login_flow(
+            on_success=self._on_auth_complete,
+            base_url=base_login_url
+        )
+        if self.gamebar:
+            self.gamebar.show_toast("Opening Xsolla Login in browser...", color="#70e1ff")
+
+    def _on_auth_complete(self, token: str, user: str, email: str):
+        """Invoked when browser redirect successfully hits the loopback listener."""
+        print(f"[Auth] Verified login callback received for {user} ({email})")
+        # Thread-safe dispatch to Tkinter root event loop
+        self.root.after(0, lambda: self._apply_auth_success(user, email, token))
+
+    def _apply_auth_success(self, user: str, email: str, token: str):
+        auth_state.log_in(user_label=user, email=email, token=token)
+        self.banner.show(f"Welcome, {user}!", shortcut="Xsolla Account Linked")
+        self.gamebar.update_auth_ui()
+        if self.gamebar.is_open:
+            self.gamebar.open_recap()
 
     def _on_logout(self):
         auth_state.log_out()
-        print("[Auth] Signed out locally.")
+        self.gamebar.update_auth_ui()
+        self.gamebar.show_toast("Signed out of Xsolla account", color="#70e1ff")
+        print("[Auth] Signed out.")
 
     def run(self):
         try:

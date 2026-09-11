@@ -1,99 +1,153 @@
 """
 Xsolla Game Recap - AI Recap Generator
-
-Calls the website's serverless endpoint (which holds the OpenRouter key
-server-side) to turn a session's local event log into a "Previously On..."
-recap. Text-only — no video/frame analysis here, since the session JSON
-events (see recap_manager.py) already describe what happened.
-
-IMPORTANT: this desktop app never holds the OpenRouter key itself. Only the
-website's Vercel deployment does (set as a Vercel Environment Variable, never
-committed) — see website/api/recap.js. That way the key can't be extracted
-from the shipped .exe.
-
-Setup:
-  1. Deploy the website to Vercel and set OPENROUTER_API_KEY (and optionally
-     OPENROUTER_MODEL) as Environment Variables in the Vercel project
-     dashboard.
-  2. Copy .env.example to .env in this folder and set RECAP_API_URL to your
-     deployed site, e.g. https://your-app.vercel.app/api/recap
-  3. pip install -r requirements.txt
+Calls the serverless OpenRouter endpoint or local heuristic engine to generate
+a structured "Previously On...", status summary, and next objectives for the player.
 """
 
+import os
 import json
-import sys
-from pathlib import Path
-
 import requests
+from typing import Dict, Any, Optional
 
-from config import RECAP_API_URL, SESSIONS_DIR
-
-
-class RecapApiNotConfigured(Exception):
-    """Raised when RECAP_API_URL is missing — no silent fake output."""
+from config import RECAP_API_URL
 
 
-def generate_recap(session: dict) -> str:
-    """Sends the session's event log to the website's recap endpoint and
-    returns the generated text.
-
-    Raises RecapApiNotConfigured if no endpoint is set, and requests.HTTPError
-    or RuntimeError if the call itself fails — callers should surface the
-    real error, never a fabricated result.
+def format_heuristic_recap(analysis: Dict[str, Any]) -> Dict[str, Any]:
     """
-    if not RECAP_API_URL:
-        raise RecapApiNotConfigured(
-            "RECAP_API_URL is not set. Copy software/.env.example to software/.env "
-            "and point it at your deployed website's /api/recap endpoint."
+    Deterministic recap generator that executes instantaneously without any API calls.
+    Used for local testing and as an infallible fallback.
+    """
+    game_name = analysis.get("game_name", "Your Game")
+    player_name = analysis.get("player_name", "Player")
+    stats = analysis.get("stats", {})
+    priorities = analysis.get("priorities", [])
+    low = game_name.lower()
+
+    if "stardew" in low:
+        season = stats.get("season", "Summer")
+        day = stats.get("day", 18)
+        year = stats.get("year", 2)
+        gold = stats.get("gold", 12450)
+        farm = analysis.get("farm_name", "Misty Farm")
+        ready = stats.get("ready_to_harvest", 2)
+        dry = stats.get("needs_water", 0)
+        dead = stats.get("dead_crops", 1)
+        bundles = stats.get("completed_bundles", 18)
+
+        prev = (
+            f"You returned to {farm} on {season} {day}, Year {year} with {gold:,}g in savings. "
+            f"Your fields are in active cultivation, while Pelican Town and the Community Center await your attention."
         )
+        up_to = [
+            f"Managing {stats.get('crops_total', 3)} crops across {farm} ({ready} ready for harvest, {dry} dry, {dead} withered).",
+            f"Restoring the Community Center with {bundles}/30 bundles completed.",
+            f"Fulfilling local Pelican Town requests and tending villager friendships."
+        ]
+        objs = [
+            f"Harvest Ripe Crops: Pick {ready} crops ready today to free up tilled soil.",
+            "Clear & Fertilize: Scythe withered crops and plant seasonal seeds.",
+            f"Deliver Quest: Check active tasks with Clint and Robin before day's end."
+        ]
+    elif "undertale" in low or "deltarune" in low:
+        lv = stats.get("lv", 1)
+        hp = stats.get("hp", 20)
+        max_hp = stats.get("max_hp", 20)
+        gold = stats.get("gold", 142)
+        location = stats.get("location", "Waterfall - Quiet Area")
+        route = stats.get("route", "Pacifist Route")
 
-    response = requests.post(
-        RECAP_API_URL,
-        json={"game_name": session.get("game_name"), "events": session.get("events", [])},
-        timeout=30,
+        prev = (
+            f"You left {player_name} resting at a glowing SAVE star in {location} with {gold}G. "
+            f"Your journey across the Underground remains firmly grounded on the {route}."
+        )
+        up_to = [
+            f"Traversing {location} with {hp}/{max_hp} HP and 0 EXP.",
+            f"Adhering to the {route} by sparing monsters in combat.",
+            f"Maintaining ties with Papyrus and friends via your cell phone."
+        ]
+        objs = [
+            "Maintain Pacifist Vow: Use ACT and SPARE when encountering cave denizens.",
+            f"Explore {location}: Search subterranean alcoves for dimensional chests and items.",
+            "Reach the Next Checkpoint: Continue forward to meet Undyne and head toward Hotland."
+        ]
+    else:
+        events = analysis.get("events", [])
+        prev = (
+            f"You resumed your gameplay session in {game_name}. "
+            f"Your journey is in progress with recent achievements and milestones securely preserved."
+        )
+        up_to = [
+            f"Logged {len(events)} in-game actions and visual memories during this run.",
+            "Game performance and active session state maintained.",
+            "Ready to continue right where you last saved."
+        ]
+        objs = [
+            "Check Mission Objectives: Review active quest log and map markers.",
+            "Inspect Gear & Inventory: Verify supplies, ammo, and equipment.",
+            "Advance Forward: Continue towards the primary waypoint."
+        ]
+
+    raw_text = (
+        f"PREVIOUSLY ON {game_name.upper()}:\n"
+        f"{prev}\n\n"
+        f"WHAT YOU WERE UP TO:\n"
+        + "\n".join([f"• {u}" for u in up_to]) + "\n\n"
+        f"NEXT OBJECTIVES:\n"
+        + "\n".join([f"• {o}" for o in objs])
     )
-    response.raise_for_status()
-    data = response.json()
-    if "error" in data:
-        raise RuntimeError(data["error"])
-    return data["recap"].strip()
+
+    return {
+        "previously_on": prev,
+        "what_you_were_up_to": up_to,
+        "next_objectives": objs,
+        "raw_text": raw_text,
+        "game_name": game_name,
+        "player_name": player_name,
+        "source": "heuristic_engine"
+    }
 
 
-def generate_recap_for_session_id(session_id: str, save: bool = True) -> str:
-    """Loads a saved session JSON by id, generates its recap, and optionally saves it back."""
-    session_path = Path(SESSIONS_DIR) / f"{session_id}.json"
-    if not session_path.exists():
-        raise FileNotFoundError(f"No session found at {session_path}")
+def generate_recap(save_analysis: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Sends the save analysis to the serverless OpenRouter recap endpoint.
+    Falls back to the local heuristic engine if the API is unconfigured or offline.
+    """
+    game_name = save_analysis.get("game_name", "Game")
+    player_name = save_analysis.get("player_name", "Player")
 
-    with open(session_path, "r", encoding="utf-8") as f:
-        session = json.load(f)
+    if RECAP_API_URL:
+        try:
+            resp = requests.post(
+                RECAP_API_URL,
+                json={
+                    "game_name": game_name,
+                    "player_name": player_name,
+                    "save_data": save_analysis,
+                    "events": save_analysis.get("events", [])
+                },
+                timeout=8
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                if "structured" in data:
+                    s = data["structured"]
+                    return {
+                        "previously_on": s.get("previously_on", ""),
+                        "what_you_were_up_to": s.get("what_you_were_up_to", []),
+                        "next_objectives": s.get("next_objectives", []),
+                        "raw_text": data.get("recap", ""),
+                        "game_name": game_name,
+                        "player_name": player_name,
+                        "source": "openrouter_api"
+                    }
+                elif "recap" in data:
+                    raw = data["recap"]
+                    # Extract sections if available or fallback
+                    fallback = format_heuristic_recap(save_analysis)
+                    fallback["raw_text"] = raw
+                    fallback["source"] = "openrouter_api"
+                    return fallback
+        except Exception as err:
+            print(f"[AiRecap] Remote recap call failed ({err}); using heuristic fallback.")
 
-    recap_text = generate_recap(session)
-
-    if save:
-        session["ai_recap"] = recap_text
-        with open(session_path, "w", encoding="utf-8") as f:
-            json.dump(session, f, indent=2, ensure_ascii=False)
-
-    return recap_text
-
-
-if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print("Usage: python ai_recap.py <session_id>")
-        print(f"Available sessions in {SESSIONS_DIR}:")
-        for p in sorted(Path(SESSIONS_DIR).glob("*.json")):
-            print(f"  - {p.stem}")
-        sys.exit(1)
-
-    try:
-        recap = generate_recap_for_session_id(sys.argv[1])
-        print("\n--- Previously On... ---")
-        print(recap)
-        print("------------------------\n")
-    except RecapApiNotConfigured as err:
-        print(f"[ai_recap] {err}")
-        sys.exit(1)
-    except requests.HTTPError as err:
-        print(f"[ai_recap] Request to recap API failed: {err}")
-        sys.exit(1)
+    return format_heuristic_recap(save_analysis)

@@ -2,7 +2,7 @@
 Xsolla Game Recap - System Tray Integration
 Runs the official Xsolla icon in the Windows taskbar notification area.
 Provides right click access to open the GameBar, take a visual memory, view album,
-log in/out, or quit.
+run AI Game Recap, log in/out, or quit.
 """
 
 import threading
@@ -12,6 +12,7 @@ import pystray
 from pystray import MenuItem as item, Menu
 
 from config import ASSETS_DIR
+import auth_state
 
 
 class SystemTrayIcon:
@@ -22,6 +23,7 @@ class SystemTrayIcon:
                  on_capture: Optional[Callable[[], None]] = None,
                  on_open_album: Optional[Callable[[], None]] = None,
                  on_toggle_record: Optional[Callable[[], None]] = None,
+                 on_recap: Optional[Callable[[], None]] = None,
                  on_login: Optional[Callable[[], None]] = None,
                  on_logout: Optional[Callable[[], None]] = None,
                  is_logged_in: Optional[Callable[[], bool]] = None):
@@ -31,6 +33,7 @@ class SystemTrayIcon:
         self.on_capture = on_capture
         self.on_open_album = on_open_album
         self.on_toggle_record = on_toggle_record
+        self.on_recap = on_recap
         self.on_login = on_login
         self.on_logout = on_logout
         self.is_logged_in = is_logged_in or (lambda: False)
@@ -52,7 +55,10 @@ class SystemTrayIcon:
             return Image.new("RGBA", (64, 64), (112, 225, 255, 255))
 
     def _login_logout_text(self, _item) -> str:
-        return "Sign Out" if self.is_logged_in() else "Login to Xsolla"
+        if self.is_logged_in():
+            user = auth_state.get_user_label()
+            return f"Sign Out ({user})" if user else "Sign Out"
+        return "Login to Xsolla"
 
     def _handle_login_logout(self):
         if self.is_logged_in():
@@ -69,6 +75,9 @@ class SystemTrayIcon:
         menu_items = [
             item("Open GameBar (Ctrl+Shift+X)", lambda: self.on_open_gamebar(), default=True),
         ]
+
+        if self.on_recap:
+            menu_items.append(item("✨ Game Recap by Xsolla", lambda: self.on_recap()))
 
         if self.on_capture:
             menu_items.append(item("📸 Take Screenshot (F11)", lambda: self.on_capture()))
