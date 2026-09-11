@@ -23,10 +23,19 @@ function collectRoutes(dir, urlPrefix, routes) {
     if (!entry.name.endsWith('.js')) continue;
     const base = entry.name.replace(/\.js$/, '');
     const routePath = base === 'index' ? urlPrefix : `${urlPrefix}/${base}`;
+    const segments = routePath.split('/').filter(Boolean);
     const paramNames = [];
     let hasCatchAll = false;
-    const regexStr = routePath
-      .split('/')
+
+    // An optional catch-all as the LAST segment ([[...name]]) makes its
+    // own leading slash optional too, so both /api/me and /api/me/x/y match
+    // the same file — handled separately from the segment-by-segment join
+    // below since it changes the join character itself.
+    const lastSeg = segments[segments.length - 1];
+    const optionalCatchAll = lastSeg && lastSeg.match(/^\[\[\.\.\.(.+)\]\]$/);
+
+    const bodySegments = optionalCatchAll ? segments.slice(0, -1) : segments;
+    const bodyRegex = bodySegments
       .map((seg) => {
         const catchAll = seg.match(/^\[\.\.\.(.+)\]$/);
         if (catchAll) {
@@ -42,6 +51,16 @@ function collectRoutes(dir, urlPrefix, routes) {
         return seg.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       })
       .join('/');
+
+    let regexStr;
+    if (optionalCatchAll) {
+      hasCatchAll = true;
+      paramNames.push({ name: optionalCatchAll[1], multi: true, optional: true });
+      regexStr = `/${bodyRegex}(?:/(.*))?`;
+    } else {
+      regexStr = `/${bodyRegex}`;
+    }
+
     routes.push({ regex: new RegExp(`^${regexStr}/?$`), paramNames, filePath: full, hasCatchAll });
   }
 }
@@ -72,7 +91,12 @@ export default function devApiPlugin() {
         const m = urlObj.pathname.match(match.regex);
         const query = Object.fromEntries(urlObj.searchParams);
         match.paramNames.forEach((param, i) => {
-          query[param.name] = param.multi ? m[i + 1].split('/') : m[i + 1];
+          const captured = m[i + 1];
+          if (param.multi) {
+            query[param.name] = captured ? captured.split('/') : [];
+          } else {
+            query[param.name] = captured;
+          }
         });
 
         let body;
