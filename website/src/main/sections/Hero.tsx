@@ -12,7 +12,7 @@ const HEADLINE = 'I build compelling visual stories & motion that make ideas shi
 const Hero = () => (
   <main className="hero relative w-full overflow-hidden bg-studio-bg min-h-screen md:h-screen md:min-h-[800px]">
     <div className="hero-big-text creator-text-animate absolute -bottom-[30px] md:-bottom-10 left-0 right-0 z-[2] pointer-events-none w-full text-center">
-      <h2>Add-on</h2>
+      <h2>Xsolla</h2>
     </div>
 
     <SpotlightReveal baseImage={BASE_IMAGE} revealImage={REVEAL_IMAGE} />

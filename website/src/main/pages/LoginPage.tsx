@@ -1,78 +1,64 @@
-import { useRef, type MouseEvent } from 'react';
 import { Link } from 'react-router-dom';
-import { useReducedMotion } from 'framer-motion';
-import Logo from '../components/Logo';
-import ThemeToggle from '../components/ThemeToggle';
-import WordReveal from '../components/WordReveal';
-import LoginForm from '../components/LoginForm';
+import { motion, useReducedMotion } from 'framer-motion';
+import SynapseXLoginForm from '../components/SynapseXLoginForm';
 
-// Same graphic asset used in Hero.tsx and GameCarousel.tsx — reused here per design direction.
-const HERO_IMAGE =
-  'https://soft-zoom-63098134.figma.site/_assets/v11/5c9f982199fde1d9b85a20e5396f0fa7bacaf9a3.png?w=2560';
+const EASE = [0.25, 0.46, 0.45, 0.94] as const;
+
+const SynapseXLogo = () => (
+  <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M9 1L16 5V13L9 17L2 13V5L9 1Z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
+    <circle cx="9" cy="9" r="2.5" fill="currentColor" />
+  </svg>
+);
 
 const LoginPage = () => {
-  const spotRef = useRef<HTMLDivElement>(null);
   const reduceMotion = useReducedMotion();
 
-  const handleGraphicMouseMove = (e: MouseEvent<HTMLDivElement>) => {
-    if (reduceMotion || !spotRef.current) return;
-    const rect = e.currentTarget.getBoundingClientRect();
-    const x = ((e.clientX - rect.left) / rect.width) * 100;
-    const y = ((e.clientY - rect.top) / rect.height) * 100;
-    spotRef.current.style.setProperty('--spot-x', `${x}%`);
-    spotRef.current.style.setProperty('--spot-y', `${y}%`);
-  };
+  const fadeUp = (delay: number) => ({
+    initial: reduceMotion ? false : { opacity: 0, y: 20 },
+    animate: { opacity: 1, y: 0 },
+    transition: { duration: 0.8, delay, ease: EASE },
+  });
 
   return (
-    <div className="min-h-dvh flex flex-col bg-studio-bg dark:bg-studio-bg-night transition-colors duration-300 overflow-x-hidden">
-      <header className="flex items-center justify-between px-5 md:px-10 py-6">
-        <Logo />
-        <div className="flex items-center gap-4">
-          <Link
-            to="/"
-            className="text-sm font-medium text-studio-ink dark:text-studio-cream hover:opacity-70 transition-opacity"
-          >
-            Back to home
+    <div
+      className="min-h-dvh bg-black flex flex-col items-center justify-center px-6 py-16 overflow-x-hidden"
+      style={{ fontFamily: '"Space Mono", monospace' }}
+    >
+      <div className="w-full max-w-md">
+        <motion.div {...fadeUp(0)}>
+          <Link to="/" className="inline-flex items-center gap-2 text-white/70 hover:text-white transition-colors">
+            <SynapseXLogo />
+            <span className="text-[15px] font-medium tracking-tight">SynapseX</span>
           </Link>
-          <ThemeToggle />
-        </div>
-      </header>
+        </motion.div>
 
-      <div className="flex-1 grid md:grid-cols-2">
-        <div
-          className="relative h-[32vh] md:h-auto overflow-hidden"
-          onMouseMove={handleGraphicMouseMove}
+        <motion.p
+          {...fadeUp(0.1)}
+          className="text-white/30 text-[11px] sm:text-[12px] tracking-[0.2em] uppercase mt-6 mb-10"
         >
-          <div
-            className="auth-image-animate absolute inset-0 bg-cover bg-center"
-            style={{ backgroundImage: `url('${HERO_IMAGE}')`, backgroundPosition: '60% 20%' }}
-          />
-          <div ref={spotRef} className="graphic-spotlight absolute inset-0" />
-          <div className="absolute inset-0 bg-gradient-to-t from-studio-bg dark:from-studio-bg-night via-transparent to-transparent md:bg-gradient-to-r md:from-studio-bg md:dark:from-studio-bg-night md:via-transparent md:to-transparent" />
+          Secure Access
+        </motion.p>
 
-          <div className="absolute inset-0 flex flex-col justify-end p-6 md:p-12">
-            <WordReveal
-              text="Continue your journey."
-              baseDelay={0.2}
-              className="font-medium text-3xl md:text-5xl leading-[1.05] tracking-tight text-studio-ink dark:text-studio-cream max-w-md"
-            />
-            <p
-              className="field-reveal mt-4 text-sm md:text-base text-studio-ink/70 dark:text-studio-cream/70 max-w-sm"
-              style={{ animationDelay: '0.5s' }}
-            >
-              Your quests, priorities, and progress are exactly where you left them.
-            </p>
-          </div>
-        </div>
+        <motion.h1
+          {...fadeUp(0.2)}
+          className="text-white font-light text-[clamp(30px,5vw,48px)] leading-[1.15] tracking-[-0.02em] mb-4"
+        >
+          Enter the interface.
+        </motion.h1>
 
-        <div className="flex flex-col items-center justify-center px-6 py-12 md:p-16">
-          <div className="w-full max-w-sm">
-            <h1 className="field-reveal font-medium text-2xl md:text-3xl text-studio-ink dark:text-studio-cream mb-8">
-              Sign in
-            </h1>
-            <LoginForm />
-          </div>
-        </div>
+        <motion.p {...fadeUp(0.3)} className="text-white/40 text-[14px] sm:text-[15px] leading-relaxed max-w-[360px] mb-10">
+          Access your SynapseX interface and connected systems.
+        </motion.p>
+
+        <motion.div {...fadeUp(0.4)}>
+          <SynapseXLoginForm />
+        </motion.div>
+
+        <motion.div {...fadeUp(0.6)} className="mt-16 text-center">
+          <p className="text-white/15 text-[10px] tracking-[0.15em] uppercase">SynapseX Labs / Secure Channel</p>
+          <p className="text-white/15 text-[10px] tracking-[0.15em] uppercase mt-1">© 2026 SynapseX Labs</p>
+        </motion.div>
       </div>
     </div>
   );

@@ -25,9 +25,11 @@ if sys.stdout and hasattr(sys.stdout, "reconfigure"):
         pass
 
 import argparse
+import webbrowser
 import tkinter as tk
 
-from config import load_config
+from config import load_config, WEBSITE_LOGIN_URL
+import auth_state
 from detector import GameDetector
 from recap_manager import RecapManager
 from banner import WatchingBanner
@@ -94,7 +96,10 @@ class XsollaGameRecapApp:
             on_quit=self.shutdown,
             on_capture=self._on_capture_requested,
             on_open_album=self._open_visual_memories,
-            on_toggle_record=self._on_record_toggled
+            on_toggle_record=self._on_record_toggled,
+            on_login=self._on_login,
+            on_logout=self._on_logout,
+            is_logged_in=auth_state.is_logged_in
         )
 
         # Start listeners, watchers and tray
@@ -196,6 +201,18 @@ class XsollaGameRecapApp:
         active = self.detector.active_game
         game_name = active.get("name") if active else "Hello Neighbor"
         self.banner.show(game_name, shortcut=self.config.get("hotkey", "Ctrl+Shift+X"))
+
+    def _on_login(self):
+        """Opens the website's login page and marks this local install as
+        logged in. This is a local UI flag only — no real session/token is
+        exchanged with the website yet."""
+        webbrowser.open(WEBSITE_LOGIN_URL)
+        auth_state.log_in()
+        print("[Auth] Opened login page; marked local install as logged in.")
+
+    def _on_logout(self):
+        auth_state.log_out()
+        print("[Auth] Signed out locally.")
 
     def run(self):
         try:

@@ -5,6 +5,7 @@ interface CTAButtonProps {
   disabled?: boolean;
   ariaBusy?: boolean;
   type?: 'button' | 'submit';
+  onClick?: () => void;
 }
 
 const ArrowIcon = ({ size }: { size: number }) => (
@@ -26,6 +27,7 @@ const CTAButton = ({
   disabled = false,
   ariaBusy = false,
   type,
+  onClick,
 }: CTAButtonProps) => {
   if (size === 'small') {
     return (
@@ -33,6 +35,7 @@ const CTAButton = ({
         type={type}
         disabled={disabled}
         aria-busy={ariaBusy}
+        onClick={onClick}
         className={`menu-cta-btn ${disabled ? 'is-disabled' : ''} ${className}`}
       >
         <span className="menu-cta-bg" />
@@ -49,6 +52,7 @@ const CTAButton = ({
       type={type}
       disabled={disabled}
       aria-busy={ariaBusy}
+      onClick={onClick}
       className={`cta-btn ${disabled ? 'is-disabled' : ''} ${className}`}
     >
       <span className="cta-btn-bg" />

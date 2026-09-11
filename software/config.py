@@ -3,6 +3,7 @@ Xsolla Game Recap - Configuration Engine
 Stores user recaps and settings locally in Documents/XSOLLA_gamerecap/.
 """
 
+import os
 import sys
 import json
 from pathlib import Path
@@ -16,6 +17,23 @@ else:
     BUNDLE_DIR = BASE_DIR
 
 ASSETS_DIR = BUNDLE_DIR / "assets"
+
+# Loads software/.env once, here, so every module that imports config gets
+# these without each needing its own load_dotenv() call. .env is gitignored —
+# never committed. See .env.example for the fields this app reads.
+try:
+    from dotenv import load_dotenv
+    load_dotenv(BASE_DIR / ".env")
+except ImportError:
+    pass
+
+# The desktop app never holds an OpenRouter key itself — it calls this
+# endpoint (a Vercel serverless function that holds the real key server-side)
+# instead. Set this after deploying the website.
+RECAP_API_URL = os.getenv("RECAP_API_URL", "")
+
+# Where the tray's "Login" button opens in the browser.
+WEBSITE_LOGIN_URL = os.getenv("WEBSITE_LOGIN_URL", "http://localhost:5183/login")
 
 # Local player storage in Documents/XSOLLA_gamerecap/
 DOCUMENTS_DIR = Path.home() / "Documents"

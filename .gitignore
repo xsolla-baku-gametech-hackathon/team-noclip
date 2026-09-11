@@ -12,6 +12,11 @@ software/dist/
 software/data/screenshots/*.png
 software/data/sessions/*.json
 
+# Secrets — never commit API keys
+.env
+*.env
+!.env.example
+
 # IDE & OS
 .vscode/
 .idea/

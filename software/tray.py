@@ -1,7 +1,8 @@
 """
 Xsolla Game Recap - System Tray Integration
 Runs the official Xsolla icon in the Windows taskbar notification area.
-Provides right click access to open the GameBar, take a visual memory, view album, or quit.
+Provides right click access to open the GameBar, take a visual memory, view album,
+log in/out, or quit.
 """
 
 import threading
@@ -20,13 +21,19 @@ class SystemTrayIcon:
                  on_quit: Callable[[], None],
                  on_capture: Optional[Callable[[], None]] = None,
                  on_open_album: Optional[Callable[[], None]] = None,
-                 on_toggle_record: Optional[Callable[[], None]] = None):
+                 on_toggle_record: Optional[Callable[[], None]] = None,
+                 on_login: Optional[Callable[[], None]] = None,
+                 on_logout: Optional[Callable[[], None]] = None,
+                 is_logged_in: Optional[Callable[[], bool]] = None):
         self.on_open_gamebar = on_open_gamebar
         self.on_test_banner = on_test_banner
         self.on_quit = on_quit
         self.on_capture = on_capture
         self.on_open_album = on_open_album
         self.on_toggle_record = on_toggle_record
+        self.on_login = on_login
+        self.on_logout = on_logout
+        self.is_logged_in = is_logged_in or (lambda: False)
 
         self.icon = None
         self._thread: Optional[threading.Thread] = None
@@ -42,6 +49,17 @@ class SystemTrayIcon:
         except Exception:
             return Image.new("RGBA", (64, 64), (112, 225, 255, 255))
 
+    def _login_logout_text(self, _item) -> str:
+        return "Sign Out" if self.is_logged_in() else "Login to Xsolla"
+
+    def _handle_login_logout(self):
+        if self.is_logged_in():
+            if self.on_logout:
+                self.on_logout()
+        else:
+            if self.on_login:
+                self.on_login()
+
     def start(self):
         """Starts the system tray icon in a dedicated background thread."""
         img = self._load_icon_image()
@@ -56,6 +74,11 @@ class SystemTrayIcon:
             menu_items.append(item("🔴 Toggle Video Recording (F9)", lambda: self.on_toggle_record()))
         if self.on_open_album:
             menu_items.append(item("🖼️ Captures Gallery", lambda: self.on_open_album()))
+
+        menu_items.append(Menu.SEPARATOR)
+
+        if self.on_login or self.on_logout:
+            menu_items.append(item(self._login_logout_text, lambda: self._handle_login_logout()))
 
         menu_items.extend([
             item("Test Watching Banner", lambda: self.on_test_banner()),

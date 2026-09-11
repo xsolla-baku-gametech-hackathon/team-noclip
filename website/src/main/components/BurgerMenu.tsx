@@ -1,19 +1,35 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import confetti from 'canvas-confetti';
 import CTAButton from './CTAButton';
-import ThemeToggle from './ThemeToggle';
+import UnderConstructionModal from './UnderConstructionModal';
 
 const NAV_LINKS = ['Work', 'About', 'Blog'];
-const SOCIALS = ['Pinterest', 'Behance', 'Letterboxd'];
-const CONTACT_EMAIL = 'hello@example.com';
+
+const fireConfetti = () => {
+  confetti({
+    particleCount: 120,
+    spread: 90,
+    origin: { y: 0.6 },
+    colors: ['#75C5DE', '#F4F1E8', '#111111'],
+  });
+};
 
 const BurgerMenu = () => {
   const [open, setOpen] = useState(false);
+  const [modalOpen, setModalOpen] = useState(false);
+  const navigate = useNavigate();
+
+  const handleNavClick = () => {
+    setOpen(false);
+    fireConfetti();
+    setModalOpen(true);
+  };
 
   return (
     <>
       <div className="burger-wrapper">
         <div className="flex items-center gap-3 pl-5 pr-5 md:pr-10">
-          <ThemeToggle />
           <button
             className={`burger-btn ${open ? 'open' : ''}`}
             onClick={() => setOpen((v) => !v)}
@@ -28,29 +44,25 @@ const BurgerMenu = () => {
       <div className={`menu-panel ${open ? 'open' : ''}`}>
         <nav>
           {NAV_LINKS.map((link) => (
-            <a key={link} href={`#${link.toLowerCase()}`} onClick={() => setOpen(false)}>
+            <button key={link} onClick={handleNavClick} className="text-left">
               {link}
-            </a>
+            </button>
           ))}
         </nav>
 
-        <div className="flex flex-col gap-5 mt-8">
-          <a href={`mailto:${CONTACT_EMAIL}`} className="menu-email text-lg md:text-xl no-underline">
-            {CONTACT_EMAIL}
-          </a>
-          <div className="menu-socials flex gap-6">
-            {SOCIALS.map((social) => (
-              <a key={social} href="#" className="text-sm underline">
-                {social}
-              </a>
-            ))}
-          </div>
-        </div>
-
         <div className="mt-8">
-          <CTAButton label="Let's talk" size="small" />
+          <CTAButton
+            label="Login"
+            size="small"
+            onClick={() => {
+              setOpen(false);
+              navigate('/login');
+            }}
+          />
         </div>
       </div>
+
+      <UnderConstructionModal open={modalOpen} onClose={() => setModalOpen(false)} />
     </>
   );
 };
