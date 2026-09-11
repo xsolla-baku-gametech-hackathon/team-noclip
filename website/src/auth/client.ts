@@ -1,13 +1,25 @@
-// Single isolated place for auth wiring. There is no backend yet — set
-// AUTH_ENDPOINT and replace the body of signIn() once one exists.
-export const AUTH_ENDPOINT = '';
+// Real email/password auth, backed by api/auth/login.js and api/auth/signup.js
+// — same users table and session cookie as Google Sign-In (api/auth/session.js).
+import { apiFetch } from './api';
+import type { CurrentUser } from './api';
 
 export interface Credentials {
   email: string;
   password: string;
 }
 
-export async function signIn(_credentials: Credentials): Promise<void> {
-  await new Promise((resolve) => setTimeout(resolve, 600));
-  throw new Error("Sign-in isn't connected yet — no backend is configured.");
+export async function signIn({ email, password }: Credentials): Promise<CurrentUser> {
+  const { user } = await apiFetch<{ user: CurrentUser }>('/api/auth/login', {
+    method: 'POST',
+    body: JSON.stringify({ email, password }),
+  });
+  return user;
+}
+
+export async function signUp({ email, password, name }: Credentials & { name?: string }): Promise<CurrentUser> {
+  const { user } = await apiFetch<{ user: CurrentUser }>('/api/auth/signup', {
+    method: 'POST',
+    body: JSON.stringify({ email, password, name }),
+  });
+  return user;
 }

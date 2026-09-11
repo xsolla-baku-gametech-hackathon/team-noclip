@@ -1,7 +1,18 @@
 import { useState, useEffect, useCallback, useRef, type ComponentProps } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
 import { Flame, ChevronLeft, ChevronRight, Pickaxe, Sword, Leaf, Skull, Eye, type LucideIcon } from 'lucide-react';
+import confetti from 'canvas-confetti';
 import CTAButton from '../components/CTAButton';
+import UnderConstructionModal from '../components/UnderConstructionModal';
+
+const fireConfetti = () => {
+  confetti({
+    particleCount: 120,
+    spread: 90,
+    origin: { y: 0.6 },
+    colors: ['#75C5DE', '#F4F1E8', '#111111'],
+  });
+};
 
 interface Game {
   title: string;
@@ -12,14 +23,21 @@ interface Game {
   ctaLabel: string;
 }
 
-// Same graphic asset used in the Hero section — kept identical here per design direction.
-const HERO_IMAGE = 'https://soft-zoom-63098134.figma.site/_assets/v11/5c9f982199fde1d9b85a20e5396f0fa7bacaf9a3.png?w=2560';
+// Official artwork per game — swap URLs here only; carousel motion/logic is untouched.
+const GAME_IMAGES: Record<string, string> = {
+  Minecraft:
+    'https://www.minecraft.net/content/dam/minecraftnet/games/minecraft/key-art/Homepage_Discover-our-games_MC-Vanilla-KeyArt_864x864.jpg',
+  'Hollow Knight': 'https://cdn.akamai.steamstatic.com/steam/apps/367520/header.jpg',
+  'Stardew Valley': 'https://cdn.akamai.steamstatic.com/steam/apps/413150/header.jpg',
+  Undertale: 'https://cdn.akamai.steamstatic.com/steam/apps/391540/header.jpg',
+  'Hello Neighbor': 'https://cdn.akamai.steamstatic.com/steam/apps/651660/header.jpg',
+};
 
 const GAMES: Game[] = [
   {
     title: 'Minecraft',
     lastPlayed: 'Last played: 4 months ago',
-    image: HERO_IMAGE,
+    image: GAME_IMAGES.Minecraft,
     icon: Pickaxe,
     story:
       "You'd just struck diamonds at Y-level -54 and were mid-build on a base overlooking the ravine when you logged off.",
@@ -28,7 +46,7 @@ const GAMES: Game[] = [
   {
     title: 'Hollow Knight',
     lastPlayed: 'Last played: 6 months ago',
-    image: HERO_IMAGE,
+    image: GAME_IMAGES['Hollow Knight'],
     icon: Sword,
     story:
       "You were one dodge away from beating the Mantis Lords, sitting on 3 masks and no charms equipped for the fight.",
@@ -37,7 +55,7 @@ const GAMES: Game[] = [
   {
     title: 'Stardew Valley',
     lastPlayed: 'Last played: today',
-    image: HERO_IMAGE,
+    image: GAME_IMAGES['Stardew Valley'],
     icon: Leaf,
     story:
       "It's Fall, Year 2. You were halfway through restoring the Greenhouse bundle and trying to romance Abigail before winter hits.",
@@ -46,7 +64,7 @@ const GAMES: Game[] = [
   {
     title: 'Undertale',
     lastPlayed: 'Last played: 1 year ago',
-    image: HERO_IMAGE,
+    image: GAME_IMAGES.Undertale,
     icon: Skull,
     story:
       "You'd just spared Papyrus and were standing at the edge of Snowdin, deciding whether this run stays pacifist.",
@@ -55,7 +73,7 @@ const GAMES: Game[] = [
   {
     title: 'Hello Neighbor',
     lastPlayed: 'Last played: 2 months ago',
-    image: HERO_IMAGE,
+    image: GAME_IMAGES['Hello Neighbor'],
     icon: Eye,
     story:
       "You'd just picked the basement lock and heard footsteps on the stairs above — the neighbor was heading home early.",
@@ -106,8 +124,14 @@ const DRAG_THRESHOLD = 60;
 
 const GameCarousel = () => {
   const [activeIndex, setActiveIndex] = useState(2);
+  const [modalOpen, setModalOpen] = useState(false);
   const offsetScale = useOffsetScale();
   const reduceMotion = useReducedMotion();
+
+  const handleResumeClick = () => {
+    fireConfetti();
+    setModalOpen(true);
+  };
 
   const goTo = useCallback((index: number) => setActiveIndex(((index % TOTAL) + TOTAL) % TOTAL), []);
   const goPrev = useCallback(() => goTo(activeIndex - 1), [activeIndex, goTo]);
@@ -194,7 +218,7 @@ const GameCarousel = () => {
                   src={game.image}
                   loading="lazy"
                   className="w-full h-full object-cover"
-                  style={{ objectPosition: '50% 15%' }}
+                  style={{ objectPosition: '50% 50%' }}
                   alt=""
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-white/95 dark:from-studio-surface-night/95 via-transparent to-black/10" />
@@ -222,7 +246,7 @@ const GameCarousel = () => {
                   </div>
 
                   <div className="mt-4 flex">
-                    <CTAButton label={game.ctaLabel} size="small" />
+                    <CTAButton label={game.ctaLabel} size="small" onClick={handleResumeClick} />
                   </div>
                 </div>
               ) : (
@@ -267,6 +291,8 @@ const GameCarousel = () => {
           <ChevronRight size={18} />
         </button>
       </div>
+
+      <UnderConstructionModal open={modalOpen} onClose={() => setModalOpen(false)} />
     </section>
   );
 };
