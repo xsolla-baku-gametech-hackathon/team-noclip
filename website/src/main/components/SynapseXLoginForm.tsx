@@ -1,12 +1,12 @@
-import { useState, type FormEvent } from 'react';
+import { useState, useMemo, type FormEvent } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Eye, EyeOff, AlertCircle } from 'lucide-react';
-import { signIn, signUp } from '../../auth/client';
+import { Eye, EyeOff, AlertCircle, Laptop } from 'lucide-react';
+import { signIn, signUp, getDeviceRedirectToken } from '../../auth/client';
 import { signInWithGoogle } from '../../auth/google';
 import { setSession } from '../../auth/session';
 import { approveDevicePairing, establishSession } from '../../auth/api';
 
-type Status = 'idle' | 'loading' | 'error';
+type Status = 'idle' | 'loading' | 'redirecting' | 'error';
 type GoogleStatus = 'idle' | 'loading' | 'error' | 'success';
 type Mode = 'login' | 'signup';
 
@@ -37,6 +37,17 @@ const SynapseXLoginForm = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const pairingCode = searchParams.get('pair');
+
+  // Desktop loopback login (auth_server.py) passes ?redirect=http://127.0.0.1:PORT/callback.
+  // Mutually exclusive with the pairing-code flow above — the desktop app uses one or the other.
+  const redirectUrl = useMemo(() => {
+    try {
+      return new URLSearchParams(window.location.search).get('redirect');
+    } catch {
+      return null;
+    }
+  }, []);
+
   const [mode, setMode] = useState<Mode>('login');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -59,10 +70,27 @@ const SynapseXLoginForm = () => {
     return Object.keys(errors).length === 0;
   };
 
-  const afterSignedIn = async () => {
+  // After a REAL sign-in (password or Google, both already established a
+  // server session by this point): link the desktop app via whichever
+  // mechanism brought us here, then land the browser somewhere sensible.
+  const afterSignedIn = async (user: { name: string; email: string }) => {
     if (pairingCode) {
       await approveDevicePairing(pairingCode);
+      navigate('/app');
+      return;
     }
+
+    if (redirectUrl) {
+      setStatus('redirecting');
+      const token = await getDeviceRedirectToken();
+      const delimiter = redirectUrl.includes('?') ? '&' : '?';
+      const target = `${redirectUrl}${delimiter}token=${encodeURIComponent(token)}&user=${encodeURIComponent(user.name)}&email=${encodeURIComponent(user.email)}`;
+      setTimeout(() => {
+        window.location.href = target;
+      }, 500);
+      return;
+    }
+
     navigate('/app');
   };
 
@@ -73,13 +101,9 @@ const SynapseXLoginForm = () => {
 
     setStatus('loading');
     try {
-      if (mode === 'signup') {
-        await signUp({ email, password, name });
-      } else {
-        await signIn({ email, password });
-      }
+      const user = mode === 'signup' ? await signUp({ email, password, name }) : await signIn({ email, password });
       setStatus('idle');
-      await afterSignedIn();
+      await afterSignedIn(user);
     } catch (err) {
       setStatus('error');
       setFormError(err instanceof Error ? err.message : 'Something went wrong.');
@@ -95,7 +119,7 @@ const SynapseXLoginForm = () => {
       setSession({ email: profile.email, name: profile.name, picture: profile.picture, provider: 'google' });
 
       setGoogleStatus('success');
-      await afterSignedIn();
+      await afterSignedIn({ name: profile.name, email: profile.email });
     } catch (err) {
       setGoogleStatus('error');
       setGoogleError(err instanceof Error ? err.message : 'Google sign-in failed.');
@@ -108,6 +132,15 @@ const SynapseXLoginForm = () => {
         <div className="text-[12px] text-white/50 border border-white/10 rounded-lg px-4 py-3">
           Signing in will link this browser to your desktop app.
           <span className="block text-white/30 mt-1 tracking-widest uppercase text-[10px]">Code {pairingCode}</span>
+        </div>
+      )}
+
+      {redirectUrl && (
+        <div className="flex items-center gap-2.5 p-3 rounded bg-[#70e1ff]/10 border border-[#70e1ff]/30 text-[12px] text-[#70e1ff]">
+          <Laptop size={16} className="shrink-0" />
+          <span>
+            Connecting to desktop app <strong>Xsolla Game Recap</strong>
+          </span>
         </div>
       )}
 
@@ -206,8 +239,21 @@ const SynapseXLoginForm = () => {
         </div>
       )}
 
-      <button type="submit" disabled={status === 'loading'} aria-busy={status === 'loading'} className="synapsex-primary-btn">
-        {status === 'loading' ? (mode === 'signup' ? 'Creating account…' : 'Accessing…') : mode === 'signup' ? 'Create account' : 'Access interface'}
+      <button
+        type="submit"
+        disabled={status === 'loading' || status === 'redirecting'}
+        aria-busy={status === 'loading' || status === 'redirecting'}
+        className="synapsex-primary-btn"
+      >
+        {status === 'redirecting'
+          ? 'Returning to Game…'
+          : status === 'loading'
+          ? mode === 'signup'
+            ? 'Creating account…'
+            : 'Accessing…'
+          : mode === 'signup'
+          ? 'Create account'
+          : 'Access interface'}
       </button>
 
       <div className="flex items-center gap-4 text-white/20 text-[10px] tracking-[0.18em] uppercase">
@@ -219,7 +265,7 @@ const SynapseXLoginForm = () => {
       <button
         type="button"
         onClick={handleGoogleClick}
-        disabled={googleStatus === 'loading'}
+        disabled={googleStatus === 'loading' || status === 'redirecting'}
         aria-busy={googleStatus === 'loading'}
         className="synapsex-secondary-btn flex items-center justify-center gap-3"
       >

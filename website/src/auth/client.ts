@@ -23,3 +23,12 @@ export async function signUp({ email, password, name }: Credentials & { name?: s
   });
   return user;
 }
+
+// For the desktop app's loopback login (auth_server.py / login_window.py):
+// after a real sign-in above, this mints a real, server-issued device token
+// scoped to the now-authenticated user — never a client-fabricated one — so
+// the desktop app's sync calls are backed by an actual credential.
+export async function getDeviceRedirectToken(): Promise<string> {
+  const { token } = await apiFetch<{ token: string }>('/api/auth/device-token', { method: 'POST' });
+  return token;
+}

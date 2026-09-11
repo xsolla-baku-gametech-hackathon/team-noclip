@@ -31,6 +31,12 @@ const BurgerMenu = () => {
       <div className="burger-wrapper">
         <div className="flex items-center gap-3 pl-5 pr-5 md:pr-10">
           <button
+            onClick={() => navigate('/login')}
+            className="px-4 py-1.5 rounded-full bg-studio-cream/10 hover:bg-studio-cream/20 text-studio-ink dark:text-studio-cream text-[13px] font-medium transition-all cursor-pointer border border-white/15"
+          >
+            Log in
+          </button>
+          <button
             className={`burger-btn ${open ? 'open' : ''}`}
             onClick={() => setOpen((v) => !v)}
             aria-label={open ? 'Close menu' : 'Open menu'}
