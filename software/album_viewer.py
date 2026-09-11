@@ -190,6 +190,8 @@ class VisualMemoriesTab(tk.Frame):
         self._video_fps: float = 30.0
         self._current_photo_list: List[Path] = []
         self._current_photo_idx: int = 0
+        self._current_video_list: List[Path] = []
+        self._current_video_idx: int = 0
         self._current_photo_tk = None
         self._current_video_tk = None
         self._updating_scrubber: bool = False
@@ -199,7 +201,7 @@ class VisualMemoriesTab(tk.Frame):
     def _build_ui(self):
         # 1. Header & Filter Strip
         header = tk.Frame(self, bg="#0d111a", padx=16, pady=10)
-        header.pack(fill="x")
+        header.pack(fill="x", side="top")
 
         # Left: Title and subtitle
         title_box = tk.Frame(header, bg="#0d111a")
@@ -215,26 +217,26 @@ class VisualMemoriesTab(tk.Frame):
 
         self.subtitle_lbl = tk.Label(
             title_box,
-            text="Documents/XSOLLA_gamerecap/recordings/",
+            text="Recent captures",
             font=("Segoe UI", 8),
             fg="#8b949e",
             bg="#0d111a"
         )
-        self.subtitle_lbl.pack(anchor="w", pady=(2, 0))
+        self.subtitle_lbl.pack(anchor="w", pady=(1, 0))
 
-        # Center / Left: Category Filter Tabs
+        # Filter Tabs straight to the left
         filter_frame = tk.Frame(header, bg="#141924", padx=2, pady=2, highlightthickness=1, highlightbackground="#1e2633")
-        filter_frame.pack(side="left", padx=18)
+        filter_frame.pack(side="left", padx=(16, 6))
 
         self.btn_filter_all = tk.Label(
             filter_frame,
             text="⚡ ALL",
-            font=("Segoe UI", 9, "bold"),
+            font=("Segoe UI", 8, "bold"),
             bg="#70e1ff",
             fg="#080b10",
             cursor="hand2",
             padx=10,
-            pady=4
+            pady=3
         )
         self.btn_filter_all.pack(side="left")
         self.btn_filter_all.bind("<Button-1>", lambda e: self._set_filter("ALL"))
@@ -242,12 +244,12 @@ class VisualMemoriesTab(tk.Frame):
         self.btn_filter_photos = tk.Label(
             filter_frame,
             text="📸 PHOTOS",
-            font=("Segoe UI", 9, "bold"),
+            font=("Segoe UI", 8, "bold"),
             bg="#141924",
             fg="#8b949e",
             cursor="hand2",
             padx=10,
-            pady=4
+            pady=3
         )
         self.btn_filter_photos.pack(side="left")
         self.btn_filter_photos.bind("<Button-1>", lambda e: self._set_filter("PHOTOS"))
@@ -255,40 +257,21 @@ class VisualMemoriesTab(tk.Frame):
         self.btn_filter_videos = tk.Label(
             filter_frame,
             text="🎬 VIDEOS",
-            font=("Segoe UI", 9, "bold"),
+            font=("Segoe UI", 8, "bold"),
             bg="#141924",
             fg="#8b949e",
             cursor="hand2",
             padx=10,
-            pady=4
+            pady=3
         )
         self.btn_filter_videos.pack(side="left")
         self.btn_filter_videos.bind("<Button-1>", lambda e: self._set_filter("VIDEOS"))
 
-        # Right: Utility Actions (Open Folder, Refresh, Close Tab)
-        btn_box = tk.Frame(header, bg="#0d111a")
-        btn_box.pack(side="right")
-
-        btn_folder = tk.Button(
-            btn_box,
-            text="📂 Open Folder",
-            font=("Segoe UI", 9, "bold"),
-            bg="#21262d",
-            fg="#f0f6fc",
-            activebackground="#30363d",
-            activeforeground="#70e1ff",
-            bd=0,
-            padx=10,
-            pady=4,
-            cursor="hand2",
-            command=self._on_folder_btn_click
-        )
-        btn_folder.pack(side="left", padx=3)
-
+        # Refresh button directly to the left next to filter tabs
         btn_refresh = tk.Button(
-            btn_box,
+            header,
             text="🔄 Refresh",
-            font=("Segoe UI", 9),
+            font=("Segoe UI", 8),
             bg="#161b22",
             fg="#8b949e",
             activebackground="#21262d",
@@ -299,11 +282,11 @@ class VisualMemoriesTab(tk.Frame):
             cursor="hand2",
             command=self.refresh
         )
-        btn_refresh.pack(side="left", padx=3)
+        btn_refresh.pack(side="left", padx=4)
 
         if self.on_close_tab:
             btn_close = tk.Label(
-                btn_box,
+                header,
                 text="✕",
                 font=("Segoe UI", 10, "bold"),
                 fg="#8b949e",
@@ -312,7 +295,7 @@ class VisualMemoriesTab(tk.Frame):
                 padx=8,
                 pady=4
             )
-            btn_close.pack(side="left", padx=(4, 0))
+            btn_close.pack(side="right")
             btn_close.bind("<Button-1>", lambda e: self.on_close_tab())
             btn_close.bind("<Enter>", lambda e: btn_close.config(fg="#ff5c5c", bg="#21262d"))
             btn_close.bind("<Leave>", lambda e: btn_close.config(fg="#8b949e", bg="#0d111a"))
@@ -406,6 +389,9 @@ class VisualMemoriesTab(tk.Frame):
 
     def _on_folder_btn_click(self):
         """Called when user clicks 'Open Folder'. Delegates to custom handler or opens directly."""
+        if self.video_recorder and getattr(self.video_recorder, "is_recording", False):
+            self._show_recording_locked_toast("Cannot open folder while recording is in progress")
+            return
         if self.on_open_folder:
             try:
                 self.on_open_folder()
@@ -515,6 +501,10 @@ class VisualMemoriesTab(tk.Frame):
         Ensures debouncing against accidental double/triple clicks and tracks the specific
         Explorer window so minimization and quitting are strictly scoped to it.
         """
+        if self.video_recorder and getattr(self.video_recorder, "is_recording", False):
+            self._show_recording_locked_toast("Cannot open folder while recording is in progress")
+            return
+
         import time
         import ctypes
         user32 = ctypes.windll.user32
@@ -608,8 +598,25 @@ class VisualMemoriesTab(tk.Frame):
 
         self.after(100, lambda: _locate_and_elevate(0))
 
+    def _show_recording_locked_toast(self, message: str):
+        """Displays high-visibility alert toast preventing media access during recording."""
+        try:
+            import winsound
+            winsound.MessageBeep(winsound.MB_ICONEXCLAMATION)
+        except Exception:
+            pass
+        if hasattr(self, "subtitle_lbl") and self.subtitle_lbl and self.subtitle_lbl.winfo_exists():
+            orig_text = self.subtitle_lbl.cget("text")
+            orig_fg = self.subtitle_lbl.cget("fg")
+            self.subtitle_lbl.config(text=f"⚠️ {message.upper()}", fg="#ff5c5c")
+            self.after(3000, lambda: self.subtitle_lbl.config(text=orig_text, fg=orig_fg) if self.subtitle_lbl and self.subtitle_lbl.winfo_exists() else None)
+
     def _open_media(self, media_path: Path):
         """Opens a media file directly in-overlay (in-game photo viewer or video player)."""
+        if self.video_recorder and getattr(self.video_recorder, "is_recording", False):
+            self._show_recording_locked_toast("Cannot open files while recording is in progress")
+            return
+
         is_video = media_path.suffix.lower() in ('.mp4', '.mkv', '.avi', '.mov')
         if is_video:
             self._show_video_player(media_path)
@@ -683,21 +690,21 @@ class VisualMemoriesTab(tk.Frame):
         )
         self.btn_copy.pack(side="left", padx=3)
 
-        btn_folder = tk.Button(
+        self.btn_delete_photo = tk.Button(
             btn_box,
-            text="📂 Open Folder",
+            text="🗑️ Delete",
             font=("Segoe UI", 9),
-            bg="#161b22",
-            fg="#c9d1d9",
-            activebackground="#21262d",
-            activeforeground="#f0f6fc",
+            bg="#21151a",
+            fg="#ff7b72",
+            activebackground="#3e1a22",
+            activeforeground="#ff5c5c",
             bd=0,
             padx=10,
             pady=4,
             cursor="hand2",
-            command=self._open_recordings_folder
+            command=self._delete_current_photo
         )
-        btn_folder.pack(side="left", padx=3)
+        self.btn_delete_photo.pack(side="left", padx=3)
 
         btn_close = tk.Label(
             btn_box,
@@ -785,6 +792,24 @@ class VisualMemoriesTab(tk.Frame):
         self._current_photo_idx = (self._current_photo_idx + delta) % len(self._current_photo_list)
         self._render_current_photo()
 
+    def _delete_current_photo(self):
+        if not self._current_photo_list:
+            return
+        photo_path = self._current_photo_list[self._current_photo_idx]
+        try:
+            if photo_path.exists():
+                photo_path.unlink()
+            self._current_photo_list.pop(self._current_photo_idx)
+            if self._current_photo_list:
+                if self._current_photo_idx >= len(self._current_photo_list):
+                    self._current_photo_idx = len(self._current_photo_list) - 1
+                self._render_current_photo()
+            else:
+                self.close_viewer()
+            self.refresh()
+        except Exception as err:
+            print(f"[Album] Error deleting photo {photo_path}: {err}")
+
     def _copy_current_photo(self):
         if not self._current_photo_list:
             return
@@ -811,7 +836,7 @@ class VisualMemoriesTab(tk.Frame):
     # In-Overlay Video Player
     # -------------------------------------------------------------------------
     def _show_video_player(self, video_path: Path):
-        """Plays recorded gameplay MP4 clip directly inside the in-game overlay."""
+        """Plays recorded gameplay MP4 clip directly inside the in-game overlay with full controls."""
         self.close_viewer()
         self.is_viewer_active = True
 
@@ -819,6 +844,14 @@ class VisualMemoriesTab(tk.Frame):
         if not self._video_cap.isOpened():
             print(f"[Album] Cannot open video: {video_path}")
             return
+
+        all_memories = self.polaroid_svc.get_recent_memories(limit=100)
+        self._current_video_list = [p for p in all_memories if p.suffix.lower() in ('.mp4', '.mkv', '.avi', '.mov')]
+        if video_path in self._current_video_list:
+            self._current_video_idx = self._current_video_list.index(video_path)
+        else:
+            self._current_video_list = [video_path]
+            self._current_video_idx = 0
 
         self._video_total_frames = int(self._video_cap.get(cv2.CAP_PROP_FRAME_COUNT)) or 1
         self._video_fps = self._video_cap.get(cv2.CAP_PROP_FPS) or 30.0
@@ -853,32 +886,36 @@ class VisualMemoriesTab(tk.Frame):
         total_sec = int(self._video_total_frames / self._video_fps)
         total_str = f"{total_sec // 60:02d}:{total_sec % 60:02d}"
 
-        tk.Label(
+        tot_v = len(self._current_video_list)
+        idx_v = f"({self._current_video_idx + 1}/{tot_v})"
+
+        self.video_title_lbl = tk.Label(
             header,
-            text=f"🎬 {video_path.stem}  [{w_v}x{h_v} • {int(self._video_fps)} FPS • {total_str}]",
+            text=f"🎬 {video_path.stem}  {idx_v}  [{w_v}x{h_v} • {int(self._video_fps)} FPS • {total_str}]",
             font=("Segoe UI", 9, "bold"),
             fg="#f0f6fc",
             bg="#0d111a"
-        ).pack(side="left", padx=16)
+        )
+        self.video_title_lbl.pack(side="left", padx=16)
 
         btn_box = tk.Frame(header, bg="#0d111a")
         btn_box.pack(side="right")
 
-        btn_folder = tk.Button(
+        self.btn_delete_video = tk.Button(
             btn_box,
-            text="📂 Open Folder",
+            text="🗑️ Delete Clip",
             font=("Segoe UI", 9),
-            bg="#161b22",
-            fg="#c9d1d9",
-            activebackground="#21262d",
-            activeforeground="#f0f6fc",
+            bg="#21151a",
+            fg="#ff7b72",
+            activebackground="#3e1a22",
+            activeforeground="#ff5c5c",
             bd=0,
             padx=10,
             pady=4,
             cursor="hand2",
-            command=self._open_recordings_folder
+            command=self._delete_current_video
         )
-        btn_folder.pack(side="left", padx=3)
+        self.btn_delete_video.pack(side="left", padx=3)
 
         btn_close = tk.Label(
             btn_box,
@@ -895,9 +932,40 @@ class VisualMemoriesTab(tk.Frame):
         btn_close.bind("<Enter>", lambda e: btn_close.config(fg="#ff5c5c", bg="#21262d"))
         btn_close.bind("<Leave>", lambda e: btn_close.config(fg="#8b949e", bg="#0d111a"))
 
-        # Video Display Canvas
-        self.video_display_lbl = tk.Label(self.viewer_frame, bg="#000000")
-        self.video_display_lbl.pack(fill="both", expand=True, padx=8, pady=(4, 0))
+        # Video Viewport with Left/Right Playlist Chevrons
+        viewport = tk.Frame(self.viewer_frame, bg="#000000")
+        viewport.pack(fill="both", expand=True)
+
+        btn_prev_v = tk.Label(
+            viewport,
+            text="❮",
+            font=("Segoe UI", 24, "bold"),
+            fg="#6e7681",
+            bg="#000000",
+            cursor="hand2",
+            padx=14
+        )
+        btn_prev_v.pack(side="left", fill="y")
+        btn_prev_v.bind("<Button-1>", lambda e: self._navigate_video(-1))
+        btn_prev_v.bind("<Enter>", lambda e: btn_prev_v.config(fg="#ff005b", bg="#0a0d14"))
+        btn_prev_v.bind("<Leave>", lambda e: btn_prev_v.config(fg="#6e7681", bg="#000000"))
+
+        btn_next_v = tk.Label(
+            viewport,
+            text="❯",
+            font=("Segoe UI", 24, "bold"),
+            fg="#6e7681",
+            bg="#000000",
+            cursor="hand2",
+            padx=14
+        )
+        btn_next_v.pack(side="right", fill="y")
+        btn_next_v.bind("<Button-1>", lambda e: self._navigate_video(1))
+        btn_next_v.bind("<Enter>", lambda e: btn_next_v.config(fg="#ff005b", bg="#0a0d14"))
+        btn_next_v.bind("<Leave>", lambda e: btn_next_v.config(fg="#6e7681", bg="#000000"))
+
+        self.video_display_lbl = tk.Label(viewport, bg="#000000")
+        self.video_display_lbl.pack(fill="both", expand=True, padx=4, pady=4)
         self.video_display_lbl.bind("<Button-1>", lambda e: self._toggle_video_play())
 
         # Controls Bar at Bottom
@@ -929,12 +997,44 @@ class VisualMemoriesTab(tk.Frame):
             activebackground="#30363d",
             activeforeground="#70e1ff",
             bd=0,
-            padx=10,
+            padx=8,
             pady=4,
             cursor="hand2",
             command=self._replay_video
         )
-        btn_replay.pack(side="left", padx=8)
+        btn_replay.pack(side="left", padx=4)
+
+        btn_back5 = tk.Button(
+            ctrl_bar,
+            text="⏪ -5s",
+            font=("Segoe UI", 8),
+            bg="#161b22",
+            fg="#c9d1d9",
+            activebackground="#21262d",
+            activeforeground="#f0f6fc",
+            bd=0,
+            padx=7,
+            pady=4,
+            cursor="hand2",
+            command=lambda: self._seek_relative(-5.0)
+        )
+        btn_back5.pack(side="left", padx=2)
+
+        btn_fwd5 = tk.Button(
+            ctrl_bar,
+            text="⏩ +5s",
+            font=("Segoe UI", 8),
+            bg="#161b22",
+            fg="#c9d1d9",
+            activebackground="#21262d",
+            activeforeground="#f0f6fc",
+            bd=0,
+            padx=7,
+            pady=4,
+            cursor="hand2",
+            command=lambda: self._seek_relative(5.0)
+        )
+        btn_fwd5.pack(side="left", padx=2)
 
         self.video_time_lbl = tk.Label(
             ctrl_bar,
@@ -989,7 +1089,7 @@ class VisualMemoriesTab(tk.Frame):
                         text=f"{cur_sec // 60:02d}:{cur_sec % 60:02d} / {tot_sec // 60:02d}:{tot_sec % 60:02d}"
                     )
 
-                avail_w = max(400, self.winfo_width() - 32) if self.winfo_width() > 100 else 880
+                avail_w = max(400, self.winfo_width() - 80) if self.winfo_width() > 100 else 880
                 avail_h = max(240, self.winfo_height() - 110) if self.winfo_height() > 100 else 460
 
                 f_h, f_w = frame.shape[:2]
@@ -1032,6 +1132,62 @@ class VisualMemoriesTab(tk.Frame):
             if self.btn_play_pause and self.btn_play_pause.winfo_exists():
                 self.btn_play_pause.config(text="⏸ PAUSE", bg="#ff005b")
 
+    def _navigate_video(self, delta: int):
+        if not self._current_video_list:
+            return
+        new_idx = (self._current_video_idx + delta) % len(self._current_video_list)
+        self._show_video_player(self._current_video_list[new_idx])
+
+    def _delete_current_video(self):
+        if not self._current_video_list:
+            return
+        video_path = self._current_video_list[self._current_video_idx]
+        try:
+            if self._video_cap:
+                try:
+                    self._video_cap.release()
+                except Exception:
+                    pass
+                self._video_cap = None
+            if self._video_timer_id:
+                try:
+                    self.after_cancel(self._video_timer_id)
+                except Exception:
+                    pass
+                self._video_timer_id = None
+
+            if video_path.exists():
+                video_path.unlink()
+            self._current_video_list.pop(self._current_video_idx)
+            if self._current_video_list:
+                if self._current_video_idx >= len(self._current_video_list):
+                    self._current_video_idx = len(self._current_video_list) - 1
+                next_video = self._current_video_list[self._current_video_idx]
+                self._show_video_player(next_video)
+            else:
+                self.close_viewer()
+            self.refresh()
+        except Exception as err:
+            print(f"[Album] Error deleting video {video_path}: {err}")
+
+    def _seek_relative(self, seconds: float):
+        if not self._video_cap:
+            return
+        cur_frame = int(self._video_cap.get(cv2.CAP_PROP_POS_FRAMES))
+        delta = int(seconds * self._video_fps)
+        new_frame = max(0, min(self._video_total_frames - 1, cur_frame + delta))
+        self._video_cap.set(cv2.CAP_PROP_POS_FRAMES, new_frame)
+        self._updating_scrubber = True
+        if self.video_scrubber and self.video_scrubber.winfo_exists():
+            self.video_scrubber.set(new_frame)
+        self._updating_scrubber = False
+        cur_sec = int(new_frame / self._video_fps)
+        tot_sec = int(self._video_total_frames / self._video_fps)
+        if self.video_time_lbl and self.video_time_lbl.winfo_exists():
+            self.video_time_lbl.config(
+                text=f"{cur_sec // 60:02d}:{cur_sec % 60:02d} / {tot_sec // 60:02d}:{tot_sec % 60:02d}"
+            )
+
     def _on_scrub(self, val):
         if getattr(self, "_updating_scrubber", False):
             return
@@ -1040,7 +1196,7 @@ class VisualMemoriesTab(tk.Frame):
             self._video_cap.set(cv2.CAP_PROP_POS_FRAMES, target)
             ret, frame = self._video_cap.read()
             if ret and frame is not None:
-                avail_w = max(400, self.winfo_width() - 32) if self.winfo_width() > 100 else 880
+                avail_w = max(400, self.winfo_width() - 80) if self.winfo_width() > 100 else 880
                 avail_h = max(240, self.winfo_height() - 110) if self.winfo_height() > 100 else 460
                 f_h, f_w = frame.shape[:2]
                 scale = min(avail_w / f_w, avail_h / f_h, 1.0)
@@ -1069,7 +1225,22 @@ class VisualMemoriesTab(tk.Frame):
             top = self.winfo_toplevel()
             top.bind("<Left>", self._on_key_left)
             top.bind("<Right>", self._on_key_right)
+            top.bind("<Up>", self._on_key_up)
+            top.bind("<Down>", self._on_key_down)
             top.bind("<space>", self._on_key_space)
+            top.bind("<Escape>", lambda e: self.close_viewer())
+        except Exception:
+            pass
+
+    def _unbind_viewer_keys(self):
+        try:
+            top = self.winfo_toplevel()
+            top.unbind("<Left>")
+            top.unbind("<Right>")
+            top.unbind("<Up>")
+            top.unbind("<Down>")
+            top.unbind("<space>")
+            top.unbind("<Escape>")
         except Exception:
             pass
 
@@ -1077,9 +1248,7 @@ class VisualMemoriesTab(tk.Frame):
         if not self.is_viewer_active:
             return
         if self._video_cap:
-            cur_frame = int(self._video_cap.get(cv2.CAP_PROP_POS_FRAMES))
-            step = int(self._video_fps * 3)
-            self._on_scrub(max(0, cur_frame - step))
+            self._seek_relative(-5.0)
         elif self._current_photo_list:
             self._navigate_photo(-1)
 
@@ -1087,9 +1256,23 @@ class VisualMemoriesTab(tk.Frame):
         if not self.is_viewer_active:
             return
         if self._video_cap:
-            cur_frame = int(self._video_cap.get(cv2.CAP_PROP_POS_FRAMES))
-            step = int(self._video_fps * 3)
-            self._on_scrub(min(self._video_total_frames - 1, cur_frame + step))
+            self._seek_relative(5.0)
+        elif self._current_photo_list:
+            self._navigate_photo(1)
+
+    def _on_key_up(self, event=None):
+        if not self.is_viewer_active:
+            return
+        if self._video_cap:
+            self._navigate_video(-1)
+        elif self._current_photo_list:
+            self._navigate_photo(-1)
+
+    def _on_key_down(self, event=None):
+        if not self.is_viewer_active:
+            return
+        if self._video_cap:
+            self._navigate_video(1)
         elif self._current_photo_list:
             self._navigate_photo(1)
 
@@ -1100,6 +1283,8 @@ class VisualMemoriesTab(tk.Frame):
     def close_viewer(self):
         """Closes any active in-overlay photo viewer or video player and returns to gallery."""
         self.is_viewer_active = False
+        self._unbind_viewer_keys()
+
         if self._video_timer_id:
             try:
                 self.after_cancel(self._video_timer_id)
@@ -1115,6 +1300,7 @@ class VisualMemoriesTab(tk.Frame):
             self._video_cap = None
 
         self._current_photo_list = []
+        self._current_video_list = []
         self._current_photo_tk = None
         self._current_video_tk = None
 
@@ -1177,6 +1363,18 @@ class VisualMemoriesTab(tk.Frame):
         self._target_scroll_y = 0.0
 
         all_memories = self.polaroid_svc.get_recent_memories(limit=100)
+
+        # Exclude active recording file from gallery and playlist to prevent cv2 read/write collisions
+        is_currently_recording = bool(self.video_recorder and getattr(self.video_recorder, "is_recording", False))
+        if is_currently_recording:
+            active_file = getattr(self.video_recorder, "current_filepath", None)
+            if active_file:
+                try:
+                    res_active = Path(active_file).resolve()
+                    all_memories = [p for p in all_memories if p.resolve() != res_active]
+                except Exception:
+                    pass
+
         photos = [p for p in all_memories if p.suffix.lower() in ('.png', '.jpg', '.jpeg')]
         videos = [p for p in all_memories if p.suffix.lower() in ('.mp4', '.mkv', '.avi', '.mov')]
 
@@ -1203,9 +1401,17 @@ class VisualMemoriesTab(tk.Frame):
             empty_desc = "Press [F11] for screenshot or [F9] for video recording in any game!"
 
         if self.subtitle_lbl and self.subtitle_lbl.winfo_exists():
-            self.subtitle_lbl.config(
-                text=f"Showing {len(items_to_display)} items • [F11] Screenshot • [F9] Video Record"
-            )
+            if is_currently_recording:
+                self.subtitle_lbl.config(
+                    text="🔴 RECORDING IN PROGRESS — File opening locked",
+                    fg="#ff5c5c"
+                )
+            else:
+                n = len(items_to_display)
+                self.subtitle_lbl.config(
+                    text=f"{n} capture{'s' if n != 1 else ''} saved" if n > 0 else "No captures yet",
+                    fg="#8b949e"
+                )
 
         if not items_to_display:
             empty_box = tk.Frame(self.scroll_frame, bg="#080b10", pady=70)
@@ -1263,9 +1469,15 @@ class VisualMemoriesTab(tk.Frame):
                 tk_thumb = ImageTk.PhotoImage(pil_img)
                 self._thumbnails.append(tk_thumb)
 
+                def _handle_card_click(p=media_path):
+                    if self.video_recorder and getattr(self.video_recorder, "is_recording", False):
+                        self._show_recording_locked_toast("Cannot open file while recording is in progress")
+                        return
+                    self._open_media(p)
+
                 img_lbl = tk.Label(card_box, image=tk_thumb, bg="#0f141f", cursor="hand2")
                 img_lbl.pack()
-                img_lbl.bind("<Button-1>", lambda e, p=media_path: self._open_media(p))
+                img_lbl.bind("<Button-1>", lambda e, p=media_path: _handle_card_click(p))
 
                 footer_bar = tk.Frame(card_box, bg="#0f141f", pady=5)
                 footer_bar.pack(fill="x")
@@ -1303,7 +1515,7 @@ class VisualMemoriesTab(tk.Frame):
                     )
 
                 btn_act.pack(side="right")
-                btn_act.bind("<Button-1>", lambda e, p=media_path: self._open_media(p))
+                btn_act.bind("<Button-1>", lambda e, p=media_path: _handle_card_click(p))
 
             except Exception as err:
                 print(f"[Album] Error loading {media_path}: {err}")

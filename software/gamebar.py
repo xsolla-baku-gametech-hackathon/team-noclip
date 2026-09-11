@@ -105,6 +105,11 @@ class GameBarOverlay:
         """Displays the dim backdrop and the horizontal NVIDIA style GameBar."""
         self.is_open = True
 
+        # Prevent opening album or files if recording phase is active
+        is_rec = bool(self.video_rec and getattr(self.video_rec, "is_recording", False))
+        if is_rec:
+            show_album = False
+
         # 1. Show the dim backdrop behind the game
         self._show_backdrop()
 
@@ -155,6 +160,12 @@ class GameBarOverlay:
 
     def toggle_album(self):
         """Toggles the Visual Memories tab inside the GameBar navbar."""
+        # Strictly prevent opening album or files while recording is in progress
+        is_rec = bool(self.video_rec and getattr(self.video_rec, "is_recording", False))
+        if is_rec and not self.is_album_open:
+            self.show_toast("File access locked while recording", color="#ff5c5c")
+            return
+
         if not self.window or not self.window.winfo_exists():
             self.open(show_album=True)
             return
@@ -257,6 +268,9 @@ class GameBarOverlay:
 
     def _on_open_folder_requested(self):
         """Elevates the recordings folder on top of everything without removing the shadow."""
+        if self.video_rec and getattr(self.video_rec, "is_recording", False):
+            self.show_toast("Folder locked while recording is active", color="#ff5c5c")
+            return
         if self.visual_memories_tab:
             self.visual_memories_tab._open_recordings_folder()
 
@@ -272,7 +286,7 @@ class GameBarOverlay:
         self.bar.bind("<Button-1>", self._start_drag)
         self.bar.bind("<B1-Motion>", self._on_drag)
 
-        # 1. Standalone Clean Xsolla Logo
+        # 1. Standalone Clean Robot Mascot Favicon / Logo in Navbar
         logo_frame = tk.Frame(self.bar, bg="#0d1117", padx=14)
         logo_frame.pack(side="left", fill="y")
         logo_frame.bind("<Button-1>", self._start_drag)
@@ -280,20 +294,24 @@ class GameBarOverlay:
 
         logo_path = ASSETS_DIR / "xsolla_mascot_clean.png"
         if not logo_path.exists():
-            logo_path = ASSETS_DIR / "xsolla_logo.png"
+            logo_path = ASSETS_DIR / "xsolla_robot_mascot.png"
 
         if logo_path.exists():
             try:
                 with Image.open(str(logo_path)) as pil_logo:
-                    # Clean standalone logo sized to fit 36px height
+                    # Clean standalone robot mascot sized to fit 36px height
                     lh = 36
                     lw = int(pil_logo.width * (lh / pil_logo.height))
                     resized = pil_logo.resize((lw, lh), Image.Resampling.LANCZOS)
                     self._logo_photo = ImageTk.PhotoImage(resized)
                     lbl_logo = tk.Label(logo_frame, image=self._logo_photo, bg="#0d1117")
-                    lbl_logo.pack(side="left", pady=10)
+                    lbl_logo.pack(side="left", pady=9)
                     lbl_logo.bind("<Button-1>", self._start_drag)
                     lbl_logo.bind("<B1-Motion>", self._on_drag)
+                    try:
+                        self.window.iconphoto(False, self._logo_photo)
+                    except Exception:
+                        pass
             except Exception:
                 pass
 
@@ -526,6 +544,12 @@ class GameBarOverlay:
         duration = self.video_rec.get_duration_str() if self.video_rec else "00:00"
 
         if is_rec:
+            # Auto-collapse album and close in-overlay viewer if recording started while open
+            if self.is_album_open:
+                self.toggle_album()
+            if self.visual_memories_tab and getattr(self.visual_memories_tab, "is_viewer_active", False):
+                self.visual_memories_tab.close_viewer()
+
             # Hide screenshot and album buttons completely
             if self.btn_snap and self.btn_snap.winfo_ismapped():
                 self.btn_snap.pack_forget()
@@ -568,6 +592,27 @@ class GameBarOverlay:
                 self.btn_rec.pack(side="left", pady=12, padx=3)
             if self.btn_album and not self.btn_album.winfo_ismapped():
                 self.btn_album.pack(side="left", pady=12, padx=3)
+
+    def show_toast(self, message: str, color: str = "#ff5c5c", duration_ms: int = 3000):
+        """Displays high-visibility alert toast preventing media access during recording."""
+        try:
+            import winsound
+            winsound.MessageBeep(winsound.MB_ICONEXCLAMATION)
+        except Exception:
+            pass
+        if hasattr(self, "status_lbl") and self.status_lbl and self.status_lbl.winfo_exists():
+            orig_text = self.status_lbl.cget("text")
+            orig_fg = self.status_lbl.cget("fg")
+            self.status_lbl.config(text=f"⚠️ {message.upper()}", fg=color)
+            if hasattr(self, "_toast_job") and self._toast_job:
+                try:
+                    self.master.after_cancel(self._toast_job)
+                except Exception:
+                    pass
+            self._toast_job = self.master.after(
+                duration_ms,
+                lambda: self.status_lbl.config(text=orig_text, fg=orig_fg) if self.status_lbl and self.status_lbl.winfo_exists() else None
+            )
 
     def _start_refresh_timer(self):
         self._update_views()

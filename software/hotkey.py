@@ -1,9 +1,10 @@
 """
 Xsolla Game Recap - Global In-Game Hotkey Listener
-Uses native Win32 RegisterHotKey API to detect shortcuts:
-- [Ctrl + Shift + X] or [Alt + X]: Toggle in-game GameBar overlay
-- [F11] or [Ctrl + Shift + S]: Capture instant high-quality screenshot
-- [F9] or [Ctrl + Shift + R]: Toggle video recording (Start / Stop)
+Uses native Win32 RegisterHotKey API to detect dedicated shortcuts:
+- [Ctrl + Shift + X]: Toggle in-game GameBar overlay
+- [F11]: Capture instant high-quality screenshot
+- [F9]: Toggle video recording (Start / Stop)
+- [F10]: Pause / Resume video recording
 """
 
 import ctypes
@@ -14,24 +15,16 @@ from typing import Callable, Optional
 # Win32 Constants
 WM_QUIT = 0x0012
 WM_HOTKEY = 0x0312
-MOD_ALT = 0x0001
 MOD_CONTROL = 0x0002
 MOD_SHIFT = 0x0004
 MOD_NOREPEAT = 0x4000
 
-HOTKEY_ID_PRIMARY = 101        # Ctrl + Shift + X
-HOTKEY_ID_SECONDARY = 102      # Alt + X
-HOTKEY_ID_CAPTURE_F11 = 103    # F11
-HOTKEY_ID_CAPTURE_COMBO = 104  # Ctrl + Shift + S
-HOTKEY_ID_RECORD_F9 = 105      # F9
-HOTKEY_ID_RECORD_COMBO = 106   # Ctrl + Shift + R
-HOTKEY_ID_PAUSE_F10 = 107       # F10
-HOTKEY_ID_PAUSE_COMBO = 108     # Ctrl + Shift + P
+HOTKEY_ID_PRIMARY = 101        # Ctrl + Shift + X (GameBar Overlay)
+HOTKEY_ID_CAPTURE_F11 = 103    # F11 (Screenshot)
+HOTKEY_ID_RECORD_F9 = 105      # F9 (Video Record)
+HOTKEY_ID_PAUSE_F10 = 107      # F10 (Pause / Resume)
 
 VK_X = 0x58
-VK_S = 0x53
-VK_R = 0x52
-VK_P = 0x50
 VK_F9 = 0x78
 VK_F10 = 0x79
 VK_F11 = 0x7A
@@ -68,13 +61,9 @@ class GlobalHotkeyListener:
         self._running = False
         try:
             user32.UnregisterHotKey(None, HOTKEY_ID_PRIMARY)
-            user32.UnregisterHotKey(None, HOTKEY_ID_SECONDARY)
             user32.UnregisterHotKey(None, HOTKEY_ID_CAPTURE_F11)
-            user32.UnregisterHotKey(None, HOTKEY_ID_CAPTURE_COMBO)
             user32.UnregisterHotKey(None, HOTKEY_ID_RECORD_F9)
-            user32.UnregisterHotKey(None, HOTKEY_ID_RECORD_COMBO)
             user32.UnregisterHotKey(None, HOTKEY_ID_PAUSE_F10)
-            user32.UnregisterHotKey(None, HOTKEY_ID_PAUSE_COMBO)
             if self._thread_id:
                 user32.PostThreadMessageW(self._thread_id, WM_QUIT, 0, 0)
         except Exception:
@@ -82,21 +71,17 @@ class GlobalHotkeyListener:
 
     def _message_loop(self):
         self._thread_id = kernel32.GetCurrentThreadId()
-        # 1. Overlay Hotkeys
+        # 1. Overlay Hotkey (Ctrl + Shift + X)
         user32.RegisterHotKey(None, HOTKEY_ID_PRIMARY, MOD_CONTROL | MOD_SHIFT | MOD_NOREPEAT, VK_X)
-        user32.RegisterHotKey(None, HOTKEY_ID_SECONDARY, MOD_ALT | MOD_NOREPEAT, VK_X)
 
-        # 2. Screenshot Capture Hotkeys
+        # 2. Screenshot Capture Hotkey (F11)
         user32.RegisterHotKey(None, HOTKEY_ID_CAPTURE_F11, MOD_NOREPEAT, VK_F11)
-        user32.RegisterHotKey(None, HOTKEY_ID_CAPTURE_COMBO, MOD_CONTROL | MOD_SHIFT | MOD_NOREPEAT, VK_S)
 
-        # 3. Video Record Hotkeys
+        # 3. Video Record Hotkey (F9)
         user32.RegisterHotKey(None, HOTKEY_ID_RECORD_F9, MOD_NOREPEAT, VK_F9)
-        user32.RegisterHotKey(None, HOTKEY_ID_RECORD_COMBO, MOD_CONTROL | MOD_SHIFT | MOD_NOREPEAT, VK_R)
 
-        # 4. Video Pause Hotkeys
+        # 4. Video Pause Hotkey (F10)
         user32.RegisterHotKey(None, HOTKEY_ID_PAUSE_F10, MOD_NOREPEAT, VK_F10)
-        user32.RegisterHotKey(None, HOTKEY_ID_PAUSE_COMBO, MOD_CONTROL | MOD_SHIFT | MOD_NOREPEAT, VK_P)
 
         msg = ctypes.wintypes.MSG()
         while self._running:
@@ -105,19 +90,19 @@ class GlobalHotkeyListener:
                 break
 
             if msg.message == WM_HOTKEY:
-                if msg.wParam in (HOTKEY_ID_PRIMARY, HOTKEY_ID_SECONDARY):
+                if msg.wParam == HOTKEY_ID_PRIMARY:
                     print("[Hotkey] Shortcut pressed: Toggling GameBar Overlay...")
                     if self.on_hotkey:
                         self.on_hotkey()
-                elif msg.wParam in (HOTKEY_ID_CAPTURE_F11, HOTKEY_ID_CAPTURE_COMBO):
+                elif msg.wParam == HOTKEY_ID_CAPTURE_F11:
                     print("[Hotkey] Screenshot hotkey pressed: Capturing Screenshot...")
                     if self.on_capture:
                         self.on_capture()
-                elif msg.wParam in (HOTKEY_ID_RECORD_F9, HOTKEY_ID_RECORD_COMBO):
+                elif msg.wParam == HOTKEY_ID_RECORD_F9:
                     print("[Hotkey] Record hotkey pressed: Toggling Video Recording...")
                     if self.on_record:
                         self.on_record()
-                elif msg.wParam in (HOTKEY_ID_PAUSE_F10, HOTKEY_ID_PAUSE_COMBO):
+                elif msg.wParam == HOTKEY_ID_PAUSE_F10:
                     print("[Hotkey] Pause hotkey pressed: Toggling Recording Pause...")
                     if self.on_pause:
                         self.on_pause()
@@ -126,10 +111,6 @@ class GlobalHotkeyListener:
             user32.DispatchMessageW(ctypes.byref(msg))
 
         user32.UnregisterHotKey(None, HOTKEY_ID_PRIMARY)
-        user32.UnregisterHotKey(None, HOTKEY_ID_SECONDARY)
         user32.UnregisterHotKey(None, HOTKEY_ID_CAPTURE_F11)
-        user32.UnregisterHotKey(None, HOTKEY_ID_CAPTURE_COMBO)
         user32.UnregisterHotKey(None, HOTKEY_ID_RECORD_F9)
-        user32.UnregisterHotKey(None, HOTKEY_ID_RECORD_COMBO)
         user32.UnregisterHotKey(None, HOTKEY_ID_PAUSE_F10)
-        user32.UnregisterHotKey(None, HOTKEY_ID_PAUSE_COMBO)

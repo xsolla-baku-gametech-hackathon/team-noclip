@@ -111,9 +111,10 @@ class XsollaGameRecapApp:
         print("  XSOLLA GAME RECAP ACTIVE")
         print("  Background game detection: ON")
         print("  System Tray Icon: Active in Windows taskbar")
-        print("  Overlay Shortcut: [Ctrl + Shift + X] (or Alt + X)")
-        print("  Screenshot Capture: [F11] (or Ctrl + Shift + S)")
-        print("  Video Recording: [F9] (or Ctrl + Shift + R)")
+        print("  Overlay Shortcut: [Ctrl + Shift + X]")
+        print("  Screenshot Capture: [F11]")
+        print("  Video Recording: [F9]")
+        print("  Recording Pause: [F10]")
         print("==========================================================")
 
         if open_immediately:
@@ -137,6 +138,12 @@ class XsollaGameRecapApp:
 
     def _open_visual_memories(self):
         """Opens the GameBar navbar with the Visual Memories tab expanded."""
+        if self.video_rec and getattr(self.video_rec, "is_recording", False):
+            print("[App] Prevented opening album/files: video recording is active.")
+            if self.gamebar:
+                self.gamebar.open(show_album=False)
+                self.gamebar.show_toast("File access locked while recording", color="#ff5c5c")
+            return
         self.gamebar.open(show_album=True)
 
     def _refresh_media_ui(self):
