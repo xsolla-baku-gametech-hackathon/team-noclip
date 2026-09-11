@@ -6,6 +6,8 @@ interface CTAButtonProps {
   ariaBusy?: boolean;
   type?: 'button' | 'submit';
   onClick?: () => void;
+  href?: string;
+  download?: boolean | string;
 }
 
 const ArrowIcon = ({ size }: { size: number }) => (
@@ -28,22 +30,30 @@ const CTAButton = ({
   ariaBusy = false,
   type,
   onClick,
+  href,
+  download,
 }: CTAButtonProps) => {
-  if (size === 'small') {
+  const bgClass = size === 'small' ? 'menu-cta-bg' : 'cta-btn-bg';
+  const textClass = size === 'small' ? 'menu-cta-text' : 'cta-btn-text';
+  const circleClass = size === 'small' ? 'menu-cta-circle' : 'cta-btn-circle';
+  const rootClass = size === 'small' ? 'menu-cta-btn' : 'cta-btn';
+  const arrowSize = size === 'small' ? 14 : 18;
+
+  const inner = (
+    <>
+      <span className={bgClass} />
+      <span className={textClass}>{label}</span>
+      <span className={circleClass}>
+        <ArrowIcon size={arrowSize} />
+      </span>
+    </>
+  );
+
+  if (href && !disabled) {
     return (
-      <button
-        type={type}
-        disabled={disabled}
-        aria-busy={ariaBusy}
-        onClick={onClick}
-        className={`menu-cta-btn ${disabled ? 'is-disabled' : ''} ${className}`}
-      >
-        <span className="menu-cta-bg" />
-        <span className="menu-cta-text">{label}</span>
-        <span className="menu-cta-circle">
-          <ArrowIcon size={14} />
-        </span>
-      </button>
+      <a href={href} download={download} className={`${rootClass} ${className}`}>
+        {inner}
+      </a>
     );
   }
 
@@ -53,13 +63,9 @@ const CTAButton = ({
       disabled={disabled}
       aria-busy={ariaBusy}
       onClick={onClick}
-      className={`cta-btn ${disabled ? 'is-disabled' : ''} ${className}`}
+      className={`${rootClass} ${disabled ? 'is-disabled' : ''} ${className}`}
     >
-      <span className="cta-btn-bg" />
-      <span className="cta-btn-text">{label}</span>
-      <span className="cta-btn-circle">
-        <ArrowIcon size={18} />
-      </span>
+      {inner}
     </button>
   );
 };

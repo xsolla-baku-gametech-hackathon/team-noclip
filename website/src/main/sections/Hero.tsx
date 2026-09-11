@@ -9,6 +9,9 @@ const REVEAL_IMAGE =
 
 const HEADLINE = 'Jump back into any game and remember exactly what you were doing.';
 
+const DOWNLOAD_URL =
+  'https://raw.githubusercontent.com/xsolla-baku-gametech-hackathon/team-noclip/main/software/XsollaGameRecap.exe';
+
 const Hero = () => {
   return (
     <main className="hero relative w-full overflow-hidden bg-studio-bg min-h-screen md:h-screen md:min-h-[800px]">
@@ -25,7 +28,13 @@ const Hero = () => {
             className="hero-headline text-[22px] md:text-[28px] font-medium leading-[120%] tracking-[-0.02em] text-studio-ink max-w-[447px]"
           />
           <div className="flex flex-wrap items-center gap-4">
-            <CTAButton label="Install Xsolla Game Recap" size="large" className="cta-animate" />
+            <CTAButton
+              label="Install Xsolla Game Recap"
+              size="large"
+              className="cta-animate"
+              href={DOWNLOAD_URL}
+              download="XsollaGameRecap.exe"
+            />
           </div>
         </div>
       </div>
