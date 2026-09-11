@@ -106,9 +106,10 @@ class XsollaGameRecapApp:
         print("  XSOLLA GAME RECAP ACTIVE")
         print("  Background game detection: ON")
         print("  System Tray Icon: Active in Windows taskbar")
-        print("  Overlay Shortcut: [Ctrl + Shift + X] (or Alt + X)")
-        print("  Screenshot Capture: [F11] (or Ctrl + Shift + S)")
-        print("  Video Recording: [F9] (or Ctrl + Shift + R)")
+        print("  Overlay Shortcut: [Ctrl + Shift + X]")
+        print("  Screenshot Capture: [F11]")
+        print("  Video Recording: [F9]")
+        print("  Recording Pause: [F10]")
         print("==========================================================")
 
         if open_immediately:

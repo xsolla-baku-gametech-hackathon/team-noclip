@@ -217,26 +217,26 @@ class VisualMemoriesTab(tk.Frame):
 
         self.subtitle_lbl = tk.Label(
             title_box,
-            text="⚡ Visual Memories & Highlights • Click any capture to view or play",
+            text="Recent captures",
             font=("Segoe UI", 8),
             fg="#8b949e",
             bg="#0d111a"
         )
-        self.subtitle_lbl.pack(anchor="w", pady=(2, 0))
+        self.subtitle_lbl.pack(anchor="w", pady=(1, 0))
 
-        # Center / Left: Category Filter Tabs
+        # Filter Tabs straight to the left
         filter_frame = tk.Frame(header, bg="#141924", padx=2, pady=2, highlightthickness=1, highlightbackground="#1e2633")
-        filter_frame.pack(side="left", padx=18)
+        filter_frame.pack(side="left", padx=(16, 6))
 
         self.btn_filter_all = tk.Label(
             filter_frame,
             text="⚡ ALL",
-            font=("Segoe UI", 9, "bold"),
+            font=("Segoe UI", 8, "bold"),
             bg="#70e1ff",
             fg="#080b10",
             cursor="hand2",
             padx=10,
-            pady=4
+            pady=3
         )
         self.btn_filter_all.pack(side="left")
         self.btn_filter_all.bind("<Button-1>", lambda e: self._set_filter("ALL"))
@@ -244,12 +244,12 @@ class VisualMemoriesTab(tk.Frame):
         self.btn_filter_photos = tk.Label(
             filter_frame,
             text="📸 PHOTOS",
-            font=("Segoe UI", 9, "bold"),
+            font=("Segoe UI", 8, "bold"),
             bg="#141924",
             fg="#8b949e",
             cursor="hand2",
             padx=10,
-            pady=4
+            pady=3
         )
         self.btn_filter_photos.pack(side="left")
         self.btn_filter_photos.bind("<Button-1>", lambda e: self._set_filter("PHOTOS"))
@@ -257,24 +257,21 @@ class VisualMemoriesTab(tk.Frame):
         self.btn_filter_videos = tk.Label(
             filter_frame,
             text="🎬 VIDEOS",
-            font=("Segoe UI", 9, "bold"),
+            font=("Segoe UI", 8, "bold"),
             bg="#141924",
             fg="#8b949e",
             cursor="hand2",
             padx=10,
-            pady=4
+            pady=3
         )
         self.btn_filter_videos.pack(side="left")
         self.btn_filter_videos.bind("<Button-1>", lambda e: self._set_filter("VIDEOS"))
 
-        # Right: Utility Actions (Refresh, Close Tab)
-        btn_box = tk.Frame(header, bg="#0d111a")
-        btn_box.pack(side="right")
-
+        # Refresh button directly to the left next to filter tabs
         btn_refresh = tk.Button(
-            btn_box,
+            header,
             text="🔄 Refresh",
-            font=("Segoe UI", 9),
+            font=("Segoe UI", 8),
             bg="#161b22",
             fg="#8b949e",
             activebackground="#21262d",
@@ -285,11 +282,11 @@ class VisualMemoriesTab(tk.Frame):
             cursor="hand2",
             command=self.refresh
         )
-        btn_refresh.pack(side="left", padx=3)
+        btn_refresh.pack(side="left", padx=4)
 
         if self.on_close_tab:
             btn_close = tk.Label(
-                btn_box,
+                header,
                 text="✕",
                 font=("Segoe UI", 10, "bold"),
                 fg="#8b949e",
@@ -298,7 +295,7 @@ class VisualMemoriesTab(tk.Frame):
                 padx=8,
                 pady=4
             )
-            btn_close.pack(side="left", padx=(4, 0))
+            btn_close.pack(side="right")
             btn_close.bind("<Button-1>", lambda e: self.on_close_tab())
             btn_close.bind("<Enter>", lambda e: btn_close.config(fg="#ff5c5c", bg="#21262d"))
             btn_close.bind("<Leave>", lambda e: btn_close.config(fg="#8b949e", bg="#0d111a"))
@@ -1406,12 +1403,13 @@ class VisualMemoriesTab(tk.Frame):
         if self.subtitle_lbl and self.subtitle_lbl.winfo_exists():
             if is_currently_recording:
                 self.subtitle_lbl.config(
-                    text="🔴 RECORDING IN PROGRESS — File opening locked until recording stops",
+                    text="🔴 RECORDING IN PROGRESS — File opening locked",
                     fg="#ff5c5c"
                 )
             else:
+                n = len(items_to_display)
                 self.subtitle_lbl.config(
-                    text=f"Showing {len(items_to_display)} items • Click to view photo or play video clip • [F11] Snap • [F9] Rec",
+                    text=f"{n} capture{'s' if n != 1 else ''} saved" if n > 0 else "No captures yet",
                     fg="#8b949e"
                 )
 

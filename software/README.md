@@ -23,8 +23,8 @@ It works just like **Nvidia GeForce Experience** or **Xbox Game Bar**, built spe
    - Uses special Windows non-activating window flags (`WS_EX_NOACTIVATE`) so it **never steals focus or minimizes your game**!
    - Stays visible for 4 seconds with a subtle cybernetic audio cue, then smoothly glides back out.
 
-3. **In-Game GameBar Dashboard (`Ctrl + Shift + X` or `Alt + X`)**:
-   - Press **`Ctrl + Shift + X`** (or **`Alt + X`**) anytime during gameplay to pop up the GameBar directly over the game.
+3. **In-Game GameBar Dashboard (`Ctrl + Shift + X`)**:
+   - Press **`Ctrl + Shift + X`** anytime during gameplay to pop up the GameBar directly over the game.
    - Press **`ESC`** or hit the shortcut again to return to your game.
    - **Live Event Timeline**: See your milestones as they happen.
    - **Manual Highlight Logger**: Type any memory or achievement (e.g., *"Beat Sans with 1 HP left!"*) and hit Log.
